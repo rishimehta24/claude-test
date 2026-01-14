@@ -45,6 +45,8 @@ export default function Home() {
   const [comparisons, setComparisons] = useState<Record<string, Record<number, ComparisonResult>>>({});
   const [loading, setLoading] = useState<Record<string, Record<number, boolean>>>({});
   const [searchQuery, setSearchQuery] = useState('');
+  const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
 
   useEffect(() => {
     // Load data from the extracted JSON file
@@ -160,6 +162,133 @@ export default function Home() {
     }
   };
 
+  const formatResponseForCSV = (response: any): string => {
+    if (response === null || response === undefined) {
+      return '';
+    }
+    if (typeof response === 'string') {
+      // Escape quotes and newlines for CSV
+      return response.replace(/"/g, '""').replace(/\n/g, ' ').replace(/\r/g, '');
+    }
+    // Convert to JSON string and escape for CSV
+    const jsonStr = JSON.stringify(response);
+    return jsonStr.replace(/"/g, '""').replace(/\n/g, ' ').replace(/\r/g, '');
+  };
+
+  const processIncorrectEvaluations = async () => {
+    // Find all notes with incorrect evaluations
+    const incorrectNotes: Array<{ resident: string; note: Note; index: number }> = [];
+    
+    residents.forEach(resident => {
+      resident.notes.forEach((note, index) => {
+        const acc = note.evaluation?.accuracy || '';
+        if (acc && acc.toLowerCase().includes('incorrect')) {
+          incorrectNotes.push({ resident: resident.residentName, note, index });
+        }
+      });
+    });
+
+    if (incorrectNotes.length === 0) {
+      alert('No notes with incorrect evaluations found.');
+      return;
+    }
+
+    const confirmed = confirm(
+      `Found ${incorrectNotes.length} notes with incorrect evaluations. This will test all ${CLAUDE_MODELS.length} models for each note. Continue?`
+    );
+
+    if (!confirmed) return;
+
+    setBulkProcessing(true);
+    setBulkProgress({ current: 0, total: incorrectNotes.length });
+
+    const csvRows: any[] = [];
+
+    try {
+      for (let i = 0; i < incorrectNotes.length; i++) {
+        const { resident, note } = incorrectNotes[i];
+        setBulkProgress({ current: i + 1, total: incorrectNotes.length });
+
+        // Test all models for this note
+        const response = await fetch('/api/compare', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            noteContent: note.noteContent,
+            models: CLAUDE_MODELS,
+          }),
+        });
+
+        const data = await response.json();
+        const results = data.results;
+
+        // Create a map of model results
+        const modelResults: Record<string, string> = {};
+        results.forEach((result: ModelResult) => {
+          if (result.success) {
+            modelResults[result.model] = formatResponseForCSV(result.response);
+          } else {
+            modelResults[result.model] = `ERROR: ${result.error || 'Unknown error'}`;
+          }
+        });
+
+        // Build CSV row - exactly 10 columns as requested
+        const groundTruthEval = note.evaluation 
+          ? `Accuracy: ${note.evaluation.accuracy} | Issues: ${note.evaluation.issues || 'None'} | Confidence: ${note.evaluation.confidence || 'N/A'} | Feedback: ${note.evaluation.feedback || ''}`
+          : '';
+
+        const row = {
+          'Input Prompt': formatResponseForCSV(note.noteContent),
+          'Original Response (claude-3-haiku)': formatResponseForCSV(note.originalResponse),
+          'Ground Truth Evaluation': formatResponseForCSV(groundTruthEval),
+          'claude-3-haiku-20240307': modelResults['claude-3-haiku-20240307'] || '',
+          'claude-sonnet-4-5-20250929': modelResults['claude-sonnet-4-5-20250929'] || '',
+          'claude-haiku-4-5-20251001': modelResults['claude-haiku-4-5-20251001'] || '',
+          'claude-opus-4-5-20251101': modelResults['claude-opus-4-5-20251101'] || '',
+          'claude-opus-4-1-20250805': modelResults['claude-opus-4-1-20250805'] || '',
+          'claude-sonnet-4-20250514': modelResults['claude-sonnet-4-20250514'] || '',
+          'claude-3-7-sonnet-20250219': modelResults['claude-3-7-sonnet-20250219'] || '',
+          'claude-opus-4-20250514': modelResults['claude-opus-4-20250514'] || '',
+        };
+
+        csvRows.push(row);
+
+        // Small delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      // Generate CSV
+      const headers = Object.keys(csvRows[0]);
+      const csvContent = [
+        headers.map(h => `"${h}"`).join(','),
+        ...csvRows.map(row => 
+          headers.map(header => `"${row[header] || ''}"`).join(',')
+        )
+      ].join('\n');
+
+      // Download CSV
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `incorrect-evaluations-comparison-${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      alert(`Successfully processed ${incorrectNotes.length} notes and downloaded CSV!`);
+    } catch (error: any) {
+      console.error('Error processing incorrect evaluations:', error);
+      alert(`Error: ${error.message}`);
+    } finally {
+      setBulkProcessing(false);
+      setBulkProgress({ current: 0, total: 0 });
+    }
+  };
+
   const filteredResidents = residents.filter(resident =>
     resident.residentName.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -168,12 +297,48 @@ export default function Home() {
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto px-4 py-8 max-w-7xl">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            Claude Model Comparison
-          </h1>
-          <p className="text-gray-600">
-            Compare outputs from different Claude models for medical note analysis
-          </p>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-4xl font-bold text-gray-900 mb-2">
+                Claude Model Comparison
+              </h1>
+              <p className="text-gray-600">
+                Compare outputs from different Claude models for medical note analysis
+              </p>
+            </div>
+            <button
+              onClick={processIncorrectEvaluations}
+              disabled={bulkProcessing}
+              className="flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg shadow-lg transition-colors"
+              title="Process all notes with incorrect evaluations and generate CSV"
+            >
+              <span className="text-2xl">☢️</span>
+              <span>{bulkProcessing ? `Processing... ${bulkProgress.current}/${bulkProgress.total}` : 'Run Bulk Analysis'}</span>
+            </button>
+          </div>
+          {bulkProcessing && (
+            <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex-shrink-0">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                </div>
+                <div className="flex-1">
+                  <div className="text-sm font-semibold text-blue-900">
+                    Processing incorrect evaluations...
+                  </div>
+                  <div className="text-xs text-blue-700 mt-1">
+                    Progress: {bulkProgress.current} of {bulkProgress.total} notes completed
+                  </div>
+                  <div className="mt-2 w-full bg-blue-200 rounded-full h-2">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="mb-6">
