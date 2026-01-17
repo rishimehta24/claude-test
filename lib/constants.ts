@@ -49,7 +49,7 @@ Patient History & The Fall Event: Ignore historical diagnoses and the mention of
 OUTPUT FORMAT:
 Your output MUST be a valid JSON array of objects.
 Each object has two keys: "phrase" (the exact text) and "matched_injury" (the term from Allowed_Injuries).
-If zero valid injuries are found, you MUST return an array with a single object containing a "reasoning" field that provides a brief logical explanation of why no injuries were detected. The explanation should reference specific words or phrases from the note that were considered but did not indicate an injury.
+If zero valid injuries are found, you MUST return an empty array [].
 Do NOT include any text outside of the JSON array.
 EXAMPLES:
 Example 1 (Multiple Injuries):
@@ -64,21 +64,15 @@ Your JSON Output:
 Example 2 (No Injuries Found):
 Note: "Unwitnessed fall. Assessed from head to toe, no cuts or bruises observed. Resident states they feel fine."
 Your JSON Output:
-[
-{ "reasoning": "The note explicitly states 'no cuts or bruises observed' which is a direct negation. The phrase 'feel fine' is a general symptom/assessment, not a physical injury. No phrases match the Allowed_Injuries list." }
-]
+[]
 Example 3 (Ignoring General Symptoms):
 Note: "Resident noted holding his shaking right hand, febrile T-37.8, denied complain of any discomfort."
 Your JSON Output:
-[
-{ "reasoning": "The word 'shaking' is a general symptom, not a physical injury. 'Febrile T-37.8' is a vital sign, not an injury. 'Denied complain of any discomfort' is a negation. None of these phrases match the Allowed_Injuries list." }
-]
+[]
 Example 4 (Ignoring Positive Assessments):
 Note: "Post fall yesterday. Vitals stable. Response: Remains alert and responsive. No new injuries identified."
 Your JSON Output:
-[
-{ "reasoning": "The phrase 'Remains alert and responsive' is a positive health assessment confirming absence of injury. 'No new injuries identified' is a direct negation. 'Vitals stable' is a general observation. No phrases indicate a physical injury from the Allowed_Injuries list." }
-]
+[]
 TASK TO COMPLETE:
 RETURN ONLY JSON, NO PREAMBLE OR EXPLANATIONS`;
 

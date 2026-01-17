@@ -1,0 +1,53 @@
+/**
+ * R&D Project: Two-Layer Injury Extraction Pipeline
+ * 
+ * API Route for R&D Pipeline Testing
+ * POST /api/rnd/extract
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { runPipeline, PipelineConfig } from '@/lib/rnd/pipeline';
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { noteContent, config } = body;
+
+    if (!noteContent) {
+      return NextResponse.json(
+        { error: 'Note content is required' },
+        { status: 400 }
+      );
+    }
+
+    const apiKey = process.env.ANTHROPIC_API_KEY || '';
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'ANTHROPIC_API_KEY environment variable is not set' },
+        { status: 500 }
+      );
+    }
+
+    const pipelineConfig: PipelineConfig = {
+      apiKey,
+      model: config?.model || 'claude-sonnet-4-5-20250929',
+      temperature: config?.temperature ?? 0,
+      maxTokens: config?.maxTokens || 2000,
+      useSectionRecognizer: config?.useSectionRecognizer ?? false,
+      evaluatorConfig: config?.evaluatorConfig || {},
+    };
+
+    const result = await runPipeline(noteContent, pipelineConfig);
+
+    return NextResponse.json({
+      success: !result.error,
+      result,
+    });
+  } catch (error: any) {
+    console.error('R&D Pipeline API Error:', error);
+    return NextResponse.json(
+      { error: error.message || 'Internal server error', success: false },
+      { status: 500 }
+    );
+  }
+}

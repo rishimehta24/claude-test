@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { CLAUDE_MODELS } from '@/lib/constants';
+import RndTab from './components/RndTab';
 
 interface Evaluation {
   accuracy: string;
@@ -40,6 +41,7 @@ interface ComparisonResult {
 }
 
 export default function Home() {
+  const [activeTab, setActiveTab] = useState<'comparison' | 'rnd'>('comparison');
   const [residents, setResidents] = useState<Resident[]>([]);
   const [expandedResidents, setExpandedResidents] = useState<Set<string>>(new Set());
   const [comparisons, setComparisons] = useState<Record<string, Record<number, ComparisonResult>>>({});
@@ -296,6 +298,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto px-4 py-8 max-w-7xl">
+        {/* Tab Navigation */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -306,6 +309,7 @@ export default function Home() {
                 Compare outputs from different Claude models for medical note analysis
               </p>
             </div>
+            {activeTab === 'comparison' && (
             <button
               onClick={processIncorrectEvaluations}
               disabled={bulkProcessing}
@@ -315,43 +319,74 @@ export default function Home() {
               <span className="text-2xl">☢️</span>
               <span>{bulkProcessing ? `Processing... ${bulkProgress.current}/${bulkProgress.total}` : 'Run Bulk Analysis'}</span>
             </button>
+            )}
           </div>
-          {bulkProcessing && (
-            <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-center gap-3">
-                <div className="flex-shrink-0">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                </div>
-                <div className="flex-1">
-                  <div className="text-sm font-semibold text-blue-900">
-                    Processing incorrect evaluations...
+          
+          {/* Tabs */}
+          <div className="flex gap-4 border-b border-gray-200 mb-6">
+            <button
+              onClick={() => setActiveTab('comparison')}
+              className={`px-6 py-3 font-semibold transition-colors ${
+                activeTab === 'comparison'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Model Comparison
+            </button>
+            <button
+              onClick={() => setActiveTab('rnd')}
+              className={`px-6 py-3 font-semibold transition-colors ${
+                activeTab === 'rnd'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              R&D Pipeline
+            </button>
+          </div>
+        </div>
+
+        {/* Tab Content */}
+        {activeTab === 'rnd' ? (
+          <RndTab />
+        ) : (
+          <>
+            {bulkProcessing && (
+              <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex-shrink-0">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
                   </div>
-                  <div className="text-xs text-blue-700 mt-1">
-                    Progress: {bulkProgress.current} of {bulkProgress.total} notes completed
-                  </div>
-                  <div className="mt-2 w-full bg-blue-200 rounded-full h-2">
-                    <div
-                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%` }}
-                    ></div>
+                  <div className="flex-1">
+                    <div className="text-sm font-semibold text-blue-900">
+                      Processing incorrect evaluations...
+                    </div>
+                    <div className="text-xs text-blue-700 mt-1">
+                      Progress: {bulkProgress.current} of {bulkProgress.total} notes completed
+                    </div>
+                    <div className="mt-2 w-full bg-blue-200 rounded-full h-2">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%` }}
+                      ></div>
+                    </div>
                   </div>
                 </div>
               </div>
+            )}
+
+            <div className="mb-6">
+              <input
+                type="text"
+                placeholder="Search by resident name..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
             </div>
-          )}
-        </div>
 
-        <div className="mb-6">
-          <input
-            type="text"
-            placeholder="Search by resident name..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-        </div>
-
-        <div className="space-y-4">
+            <div className="space-y-4">
           {filteredResidents.map((resident) => {
             const isExpanded = expandedResidents.has(resident.residentName);
             const residentComparisons = comparisons[resident.residentName] || {};
@@ -693,12 +728,14 @@ export default function Home() {
               </div>
             );
           })}
-        </div>
 
-        {filteredResidents.length === 0 && (
-          <div className="text-center py-12 text-gray-500">
-            {searchQuery ? 'No residents found matching your search.' : 'No residents loaded. Please run the data extraction script.'}
-          </div>
+              {filteredResidents.length === 0 && (
+                <div className="text-center py-12 text-gray-500">
+                  {searchQuery ? 'No residents found matching your search.' : 'No residents loaded. Please run the data extraction script.'}
+                </div>
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>
