@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { ALL_MODELS, ModelInfo } from '@/lib/constants';
 import RndTab from './components/RndTab';
 import BulkTestTab from './components/BulkTestTab';
+import SemanticTab from './components/SemanticTab';
 
 interface Evaluation {
   accuracy: string;
@@ -44,7 +45,7 @@ interface ComparisonResult {
 }
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<'comparison' | 'rnd' | 'bulk'>('comparison');
+  const [activeTab, setActiveTab] = useState<'comparison' | 'rnd' | 'bulk' | 'semantic'>('comparison');
   const [residents, setResidents] = useState<Resident[]>([]);
   const [expandedResidents, setExpandedResidents] = useState<Set<string>>(new Set());
   const [comparisons, setComparisons] = useState<Record<string, Record<string | number, ComparisonResult>>>({});
@@ -355,6 +356,16 @@ export default function Home() {
             >
               R&D Pipeline
             </button>
+            <button
+              onClick={() => setActiveTab('semantic')}
+              className={`px-6 py-3 font-semibold transition-colors ${
+                activeTab === 'semantic'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Semantic Validation
+            </button>
           </div>
         </div>
 
@@ -363,6 +374,8 @@ export default function Home() {
           <BulkTestTab />
         ) : activeTab === 'rnd' ? (
           <RndTab />
+        ) : activeTab === 'semantic' ? (
+          <SemanticTab />
         ) : (
           <>
           {bulkProcessing && (
@@ -703,9 +716,9 @@ export default function Home() {
                                                   {result.provider.toUpperCase()}
                                                 </span>
                                               )}
-                                              {result.model === note.originalModel && (
-                                                <span className="ml-2 text-xs text-gray-500">(Original)</span>
-                                              )}
+                                            {result.model === note.originalModel && (
+                                              <span className="ml-2 text-xs text-gray-500">(Original)</span>
+                                            )}
                                             </div>
                                           </td>
                                           <td className="border border-gray-300 px-4 py-3">

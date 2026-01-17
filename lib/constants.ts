@@ -8,27 +8,27 @@ export interface ModelInfo {
 
 export const ALL_MODELS: ModelInfo[] = [
   // Anthropic Claude Models
-  { id: 'claude-3-haiku-20240307', provider: 'anthropic', displayName: 'Claude 3 Haiku (20240307)' },
-  { id: 'claude-sonnet-4-5-20250929', provider: 'anthropic', displayName: 'Claude Sonnet 4.5' },
-  { id: 'claude-haiku-4-5-20251001', provider: 'anthropic', displayName: 'Claude Haiku 4.5' },
+  // Powerful models (most capable)
   { id: 'claude-opus-4-5-20251101', provider: 'anthropic', displayName: 'Claude Opus 4.5' },
-  { id: 'claude-opus-4-1-20250805', provider: 'anthropic', displayName: 'Claude Opus 4.1' },
-  { id: 'claude-sonnet-4-20250514', provider: 'anthropic', displayName: 'Claude Sonnet 4' },
-  { id: 'claude-3-7-sonnet-20250219', provider: 'anthropic', displayName: 'Claude 3.7 Sonnet' },
-  { id: 'claude-opus-4-20250514', provider: 'anthropic', displayName: 'Claude Opus 4' },
+  // Fast models (quickest)
+  { id: 'claude-3-haiku-20240307', provider: 'anthropic', displayName: 'Claude 3 Haiku (20240307)' },
+  { id: 'claude-haiku-4-5-20251001', provider: 'anthropic', displayName: 'Claude Haiku 4.5' },
+  // Middle (balanced) - keep one
+  { id: 'claude-sonnet-4-5-20250929', provider: 'anthropic', displayName: 'Claude Sonnet 4.5' },
   
   // OpenAI GPT Models
+  // Powerful models (most capable)
   { id: 'gpt-4o', provider: 'openai', displayName: 'GPT-4o' },
-  { id: 'gpt-4o-mini', provider: 'openai', displayName: 'GPT-4o Mini' },
   { id: 'gpt-4-turbo', provider: 'openai', displayName: 'GPT-4 Turbo' },
-  { id: 'gpt-4', provider: 'openai', displayName: 'GPT-4' },
+  // Fast models (quickest)
+  { id: 'gpt-4o-mini', provider: 'openai', displayName: 'GPT-4o Mini' },
   { id: 'gpt-3.5-turbo', provider: 'openai', displayName: 'GPT-3.5 Turbo' },
   
-  // Google Gemini Models (model IDs match Google API naming)
-  { id: 'gemini-2.0-flash-exp', provider: 'google', displayName: 'Gemini 2.0 Flash (Experimental)' },
-  { id: 'gemini-1.5-pro-latest', provider: 'google', displayName: 'Gemini 1.5 Pro' },
-  { id: 'gemini-1.5-flash-latest', provider: 'google', displayName: 'Gemini 1.5 Flash' },
-  { id: 'gemini-pro', provider: 'google', displayName: 'Gemini 1.0 Pro' },
+  // Google Gemini Models
+  // Powerful model (most capable)
+  { id: 'gemini-3-pro-preview', provider: 'google', displayName: 'Gemini 3 Pro Preview' },
+  // Fast model (quickest)
+  { id: 'gemini-2.5-flash-lite', provider: 'google', displayName: 'Gemini 2.5 Flash Lite' },
 ];
 
 // Legacy export for backwards compatibility

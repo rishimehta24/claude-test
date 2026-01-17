@@ -68,21 +68,73 @@ export default function BulkTestTab() {
     try {
       for (let noteIndex = 0; noteIndex < validNotes.length; noteIndex++) {
         const noteContent = validNotes[noteIndex];
+        const modelResults: ModelResult[] = [];
 
-        // Test all models for this note
-        const response = await fetch('/api/compare', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            noteContent,
-            models: ALL_MODELS.map(m => m.id),
-          }),
-        });
+        // Test each model individually using R&D two-layer pipeline
+        for (let modelIndex = 0; modelIndex < ALL_MODELS.length; modelIndex++) {
+          const modelInfo = ALL_MODELS[modelIndex];
+          
+          try {
+            const response = await fetch('/api/rnd/extract', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                noteContent,
+                config: {
+                  model: modelInfo.id,
+                  temperature: 0,
+                  maxTokens: 2000,
+                  useSectionRecognizer: false,
+                  evaluatorConfig: {
+                    excludeNegated: true,
+                    respectNoInjuryStatements: true,
+                    preferExplicit: true,
+                    strictPainEvaluation: true,
+                    requireExactMatch: true,
+                  },
+                },
+              }),
+            });
 
-        const data = await response.json();
-        const modelResults: ModelResult[] = data.results || [];
+            const data = await response.json();
+
+            if (data.success && data.result) {
+              // R&D pipeline returns finalInjuries in the same format
+              modelResults.push({
+                model: modelInfo.id,
+                provider: modelInfo.provider,
+                success: !data.result.error,
+                response: data.result.finalInjuries || [],
+                rawResponse: data.result.rawLayer1Response || null,
+                error: data.result.error || undefined,
+              });
+            } else {
+              modelResults.push({
+                model: modelInfo.id,
+                provider: modelInfo.provider,
+                success: false,
+                response: null,
+                rawResponse: null,
+                error: data.error || 'Unknown error',
+              });
+            }
+          } catch (error: any) {
+            modelResults.push({
+              model: modelInfo.id,
+              provider: modelInfo.provider,
+              success: false,
+              response: null,
+              rawResponse: null,
+              error: error.message || 'Failed to test model',
+            });
+          }
+
+          // Update progress
+          const currentProgress = (noteIndex * ALL_MODELS.length) + (modelIndex + 1);
+          setProgress({ current: currentProgress, total: totalRequests });
+        }
 
         allResults.push({
           noteIndex: noteIndex + 1,
@@ -90,11 +142,10 @@ export default function BulkTestTab() {
           results: modelResults,
         });
 
-        setProgress({ current: (noteIndex + 1) * ALL_MODELS.length, total: totalRequests });
         setResults([...allResults]);
 
         // Small delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 300));
       }
     } catch (error: any) {
       console.error('Bulk test error:', error);
@@ -178,10 +229,15 @@ export default function BulkTestTab() {
     <div className="space-y-6">
       <div className="bg-white rounded-lg shadow-md border border-gray-200 p-6">
         <h2 className="text-2xl font-bold text-black mb-4">
-          Bulk Model Testing
+          Bulk Model Testing (Two-Layer R&D Pipeline)
         </h2>
-        <p className="text-gray-600 mb-6">
-          Test up to 5 nurse notes across all {ALL_MODELS.length} models. Results will be exported as a CSV report.
+        <p className="text-black mb-6">
+          Test up to 5 nurse notes across all {ALL_MODELS.length} models using the <strong>Two-Layer R&D Pipeline</strong>:
+          <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
+            <li><strong>Layer 1 (LLM)</strong>: Extracts structured evidence from each note</li>
+            <li><strong>Layer 2 (Deterministic Code)</strong>: Evaluates evidence to produce final injuries</li>
+          </ul>
+          <span className="text-sm text-gray-600 mt-2 block">Results will be exported as a CSV report showing final injuries from Layer 2 evaluation.</span>
         </p>
 
         {/* Note Inputs */}

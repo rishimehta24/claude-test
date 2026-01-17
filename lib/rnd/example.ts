@@ -31,7 +31,11 @@ async function runExample(noteName: keyof typeof EXAMPLE_NOTES) {
   console.log(`Note: ${noteContent}\n`);
 
   const config: PipelineConfig = {
-    apiKey: process.env.ANTHROPIC_API_KEY || '',
+    apiKeys: {
+      anthropic: process.env.ANTHROPIC_API_KEY || '',
+      openai: process.env.OPENAI_API_KEY || '',
+      google: process.env.GOOGLE_API_KEY || '',
+    },
     model: 'claude-sonnet-4-5-20250929',
     temperature: 0,
     maxTokens: 2000,

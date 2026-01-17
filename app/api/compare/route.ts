@@ -110,16 +110,57 @@ export async function POST(request: NextRequest) {
           // Try to parse JSON from the response
           let parsedResponse;
           try {
-            // Extract JSON from the response (in case there's extra text)
-            const jsonMatch = text.match(/\[[\s\S]*\]/);
+            // First, try to find JSON array pattern (most common)
+            let jsonMatch: RegExpMatchArray | string | null = text.match(/\[[\s\S]*?\]/);
+            
+            // If no array found, try to find any JSON object/array
+            if (!jsonMatch) {
+              // Try to find JSON code blocks
+              const codeBlockMatch = text.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/);
+              if (codeBlockMatch && codeBlockMatch[1]) {
+                jsonMatch = codeBlockMatch[1]; // This is a string (capture group)
+              } else {
+                // Try to find JSON after common prefixes
+                const afterPrefixMatch = text.match(/(?:Output|Response|JSON):\s*(\[[\s\S]*?\])/i);
+                if (afterPrefixMatch && afterPrefixMatch[1]) {
+                  jsonMatch = afterPrefixMatch[1]; // This is a string (capture group)
+                } else {
+                  // Try to find any array-like structure
+                  const anyArrayMatch = text.match(/\[\s*\{[\s\S]*?\}\s*\]/);
+                  if (anyArrayMatch) {
+                    jsonMatch = anyArrayMatch; // This is RegExpMatchArray
+                  }
+                }
+              }
+            }
+            
             if (jsonMatch) {
-              parsedResponse = JSON.parse(jsonMatch[0]);
+              const jsonStr = typeof jsonMatch === 'string' ? jsonMatch : jsonMatch[0];
+              parsedResponse = JSON.parse(jsonStr);
+              
+              // Validate it's an array
+              if (!Array.isArray(parsedResponse)) {
+                parsedResponse = [];
+              }
             } else {
-              parsedResponse = [];
+              // If no JSON found and response seems empty or indicates no injuries
+              const lowerText = text.toLowerCase().trim();
+              if (lowerText === '' || lowerText === '[]' || lowerText.includes('no injuries') || lowerText.includes('empty array')) {
+                parsedResponse = [];
+              } else {
+                // Return raw text if we can't parse
+                parsedResponse = text;
+              }
             }
           } catch (parseError) {
-            // If parsing fails, return the raw text
-            parsedResponse = text;
+            // If parsing fails, check if it's just an empty response
+            const trimmed = text.trim();
+            if (trimmed === '' || trimmed === '[]') {
+              parsedResponse = [];
+            } else {
+              // Return raw text for debugging
+              parsedResponse = text;
+            }
           }
 
           return {

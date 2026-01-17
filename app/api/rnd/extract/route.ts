@@ -20,16 +20,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY || '';
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'ANTHROPIC_API_KEY environment variable is not set' },
-        { status: 500 }
-      );
-    }
-
     const pipelineConfig: PipelineConfig = {
-      apiKey,
+      apiKeys: {
+        anthropic: process.env.ANTHROPIC_API_KEY || '',
+        openai: process.env.OPENAI_API_KEY || '',
+        google: process.env.GOOGLE_API_KEY || '',
+      },
       model: config?.model || 'claude-sonnet-4-5-20250929',
       temperature: config?.temperature ?? 0,
       maxTokens: config?.maxTokens || 2000,
