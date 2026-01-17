@@ -3,17 +3,18 @@
  * Uses embeddings to validate and match injury mentions semantically
  */
 
-import { pipeline } from '@xenova/transformers';
 import { ALLOWED_INJURIES } from './rnd/schema';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let similarityPipeline: any = null;
 
 /**
- * Initialize the similarity pipeline (lazy loading)
+ * Initialize the similarity pipeline (lazy loading with dynamic import)
  */
 async function getSimilarityPipeline(): Promise<any> {
   if (!similarityPipeline) {
+    // Use dynamic import to prevent blocking during module initialization
+    const { pipeline } = await import('@xenova/transformers');
     // Use 'Xenova/all-MiniLM-L6-v2' which is similar to all-MiniLM-L12-v2 but smaller/faster
     // For better accuracy, we could use 'Xenova/all-mpnet-base-v2' but it's larger
     similarityPipeline = await pipeline(
