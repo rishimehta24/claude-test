@@ -36,7 +36,8 @@ interface ModelResult {
 }
 
 interface ComparisonResult {
-  noteIndex: number;
+  noteKey?: string | number;
+  noteIndex?: number;
   results: ModelResult[];
 }
 
@@ -44,8 +45,8 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<'comparison' | 'rnd'>('comparison');
   const [residents, setResidents] = useState<Resident[]>([]);
   const [expandedResidents, setExpandedResidents] = useState<Set<string>>(new Set());
-  const [comparisons, setComparisons] = useState<Record<string, Record<number, ComparisonResult>>>({});
-  const [loading, setLoading] = useState<Record<string, Record<number, boolean>>>({});
+  const [comparisons, setComparisons] = useState<Record<string, Record<string | number, ComparisonResult>>>({});
+  const [loading, setLoading] = useState<Record<string, Record<string | number, boolean>>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [bulkProcessing, setBulkProcessing] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
