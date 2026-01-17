@@ -1,13 +1,40 @@
-export const CLAUDE_MODELS = [
-  'claude-3-haiku-20240307', // Original model
-  'claude-sonnet-4-5-20250929',
-  'claude-haiku-4-5-20251001',
-  'claude-opus-4-5-20251101',
-  'claude-opus-4-1-20250805',
-  'claude-sonnet-4-20250514',
-  'claude-3-7-sonnet-20250219',
-  'claude-opus-4-20250514',
-] as const;
+export type ModelProvider = 'anthropic' | 'openai' | 'google';
+
+export interface ModelInfo {
+  id: string;
+  provider: ModelProvider;
+  displayName: string;
+}
+
+export const ALL_MODELS: ModelInfo[] = [
+  // Anthropic Claude Models
+  { id: 'claude-3-haiku-20240307', provider: 'anthropic', displayName: 'Claude 3 Haiku (20240307)' },
+  { id: 'claude-sonnet-4-5-20250929', provider: 'anthropic', displayName: 'Claude Sonnet 4.5' },
+  { id: 'claude-haiku-4-5-20251001', provider: 'anthropic', displayName: 'Claude Haiku 4.5' },
+  { id: 'claude-opus-4-5-20251101', provider: 'anthropic', displayName: 'Claude Opus 4.5' },
+  { id: 'claude-opus-4-1-20250805', provider: 'anthropic', displayName: 'Claude Opus 4.1' },
+  { id: 'claude-sonnet-4-20250514', provider: 'anthropic', displayName: 'Claude Sonnet 4' },
+  { id: 'claude-3-7-sonnet-20250219', provider: 'anthropic', displayName: 'Claude 3.7 Sonnet' },
+  { id: 'claude-opus-4-20250514', provider: 'anthropic', displayName: 'Claude Opus 4' },
+  
+  // OpenAI GPT Models
+  { id: 'gpt-4o', provider: 'openai', displayName: 'GPT-4o' },
+  { id: 'gpt-4o-mini', provider: 'openai', displayName: 'GPT-4o Mini' },
+  { id: 'gpt-4-turbo', provider: 'openai', displayName: 'GPT-4 Turbo' },
+  { id: 'gpt-4', provider: 'openai', displayName: 'GPT-4' },
+  { id: 'gpt-3.5-turbo', provider: 'openai', displayName: 'GPT-3.5 Turbo' },
+  
+  // Google Gemini Models (model IDs match Google API naming)
+  { id: 'gemini-2.0-flash-exp', provider: 'google', displayName: 'Gemini 2.0 Flash (Experimental)' },
+  { id: 'gemini-1.5-pro-latest', provider: 'google', displayName: 'Gemini 1.5 Pro' },
+  { id: 'gemini-1.5-flash-latest', provider: 'google', displayName: 'Gemini 1.5 Flash' },
+  { id: 'gemini-pro', provider: 'google', displayName: 'Gemini 1.0 Pro' },
+];
+
+// Legacy export for backwards compatibility
+export const CLAUDE_MODELS = ALL_MODELS
+  .filter(m => m.provider === 'anthropic')
+  .map(m => m.id) as readonly string[];
 
 export const SYSTEM_PROMPT = `You are an extremely precise medical data analyst. Your entire purpose is to execute one task perfectly.
 PRIMARY DIRECTIVE: You must extract ONLY the new, physical injuries that are a direct result of a fall, as described in the 'Note'. The injury MUST be present on the patient.

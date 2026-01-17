@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { ALL_MODELS, ModelInfo } from '@/lib/constants';
 
 interface Layer1Evidence {
   injury_mentions: Array<{
@@ -211,9 +212,11 @@ export default function RndTab() {
                 onChange={(e) => setModel(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                <option value="claude-sonnet-4-5-20250929">claude-sonnet-4-5-20250929</option>
-                <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001</option>
-                <option value="claude-opus-4-5-20251101">claude-opus-4-5-20251101</option>
+                {ALL_MODELS.map((modelInfo: ModelInfo) => (
+                  <option key={modelInfo.id} value={modelInfo.id}>
+                    {modelInfo.displayName} ({modelInfo.provider})
+                  </option>
+                ))}
               </select>
             </div>
             <div>
@@ -280,103 +283,244 @@ export default function RndTab() {
         </button>
       </div>
 
-      {/* Results */}
+      {/* Results - Step by Step Flow */}
       {result && (
-        <div className="space-y-4">
-          {/* Final Injuries */}
-          <div className="bg-white rounded-lg shadow-md border border-gray-200 p-6">
-            <h3 className="text-xl font-bold text-black mb-4">
-              Final Injuries (Layer 2 Output)
-            </h3>
-            {result.error ? (
+        <div className="space-y-6">
+          {/* Step 0: Original Note */}
+          <div className="bg-white rounded-lg shadow-md border-2 border-gray-300 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-shrink-0 w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center font-bold text-black">
+                0
+              </div>
+              <h3 className="text-xl font-bold text-black">
+                Step 0: Original Note
+              </h3>
+            </div>
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <div className="text-sm text-black whitespace-pre-wrap font-mono max-h-60 overflow-y-auto">
+                {result.originalNote || noteContent}
+              </div>
+              <div className="mt-2 text-xs text-black opacity-70">
+                Length: {(result.originalNote || noteContent).length} characters
+              </div>
+            </div>
+          </div>
+
+          {/* Flow Arrow */}
+          {result && (
+            <div className="flex justify-center my-2">
+              <div className="text-2xl text-black">↓</div>
+            </div>
+          )}
+
+          {/* Step 1: Preprocessing (if enabled) */}
+          {result.usedSectionRecognizer && result.preprocessedNote && (
+            <div className="bg-white rounded-lg shadow-md border-2 border-blue-300 p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-shrink-0 w-8 h-8 bg-blue-200 rounded-full flex items-center justify-center font-bold text-black">
+                  1
+                </div>
+                <h3 className="text-xl font-bold text-black">
+                  Step 1: Preprocessing (Section Recognizer)
+                </h3>
+                <span className="px-2 py-1 bg-blue-100 text-black text-xs font-semibold rounded">
+                  ACTIVE
+                </span>
+              </div>
+              <p className="text-sm text-black mb-3 opacity-80">
+                Filtered out less relevant sections (medications, allergies, etc.) and kept injury-relevant content.
+              </p>
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <div className="text-sm text-black whitespace-pre-wrap font-mono max-h-60 overflow-y-auto">
+                  {result.preprocessedNote}
+                </div>
+                <div className="mt-2 flex items-center gap-4 text-xs text-black opacity-70">
+                  <span>Length: {result.preprocessedNote.length} characters</span>
+                  <span className="text-green-700 font-semibold">
+                    Reduced by {((1 - result.preprocessedNote.length / (result.originalNote || noteContent).length) * 100).toFixed(1)}%
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!result.usedSectionRecognizer && (
+            <div className="bg-white rounded-lg shadow-md border-2 border-gray-200 p-6 opacity-60">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="flex-shrink-0 w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center font-bold text-black">
+                  1
+                </div>
+                <h3 className="text-xl font-bold text-black">
+                  Step 1: Preprocessing (Section Recognizer)
+                </h3>
+                <span className="px-2 py-1 bg-gray-200 text-black text-xs font-semibold rounded">
+                  SKIPPED
+                </span>
+              </div>
+              <p className="text-sm text-black opacity-70">
+                Preprocessing is disabled. Original note sent directly to Layer 1.
+              </p>
+            </div>
+          )}
+
+          {/* Flow Arrow */}
+          {result && (
+            <div className="flex justify-center my-2">
+              <div className="text-2xl text-black">↓</div>
+            </div>
+          )}
+
+          {/* Step 2: Layer 1 Evidence Extraction */}
+          {result.error ? (
+            <div className="bg-white rounded-lg shadow-md border-2 border-red-300 p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-shrink-0 w-8 h-8 bg-red-200 rounded-full flex items-center justify-center font-bold text-black">
+                  2
+                </div>
+                <h3 className="text-xl font-bold text-black">
+                  Step 2: Layer 1 - LLM Evidence Extraction
+                </h3>
+              </div>
               <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
                 <p className="text-black font-semibold">Error: {result.error}</p>
               </div>
-            ) : (
-              <div>
-                {result.finalInjuries.length === 0 ? (
-                  <p className="text-black italic">No injuries detected (empty array)</p>
-                ) : (
-                  <pre className="bg-gray-50 p-4 rounded-lg border border-gray-200 overflow-x-auto text-sm text-black">
-                    {JSON.stringify(result.finalInjuries, null, 2)}
-                  </pre>
-                )}
+            </div>
+          ) : result.layer1Evidence ? (
+            <div className="bg-white rounded-lg shadow-md border-2 border-purple-300 p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-shrink-0 w-8 h-8 bg-purple-200 rounded-full flex items-center justify-center font-bold text-black">
+                  2
+                </div>
+                <h3 className="text-xl font-bold text-black">
+                  Step 2: Layer 1 - LLM Evidence Extraction
+                </h3>
+                <span className="px-2 py-1 bg-green-100 text-black text-xs font-semibold rounded">
+                  COMPLETE
+                </span>
               </div>
-            )}
-          </div>
-
-          {/* Layer 1 Evidence */}
-          {result.layer1Evidence && !result.error && (
-            <div className="bg-white rounded-lg shadow-md border border-gray-200 p-6">
-              <h3 className="text-xl font-bold text-black mb-4">
-                Layer 1 Evidence (for auditing)
-              </h3>
-              <div className="space-y-4">
-                <div>
-                  <h4 className="font-semibold text-black mb-2">Summary</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
-                    <div className="bg-blue-50 p-3 rounded border border-gray-300">
-                      <div className="font-semibold text-black">Injury Mentions</div>
-                      <div className="text-2xl font-bold text-black">
-                        {result.layer1Evidence.injury_mentions.length}
-                      </div>
+              <p className="text-sm text-black mb-4 opacity-80">
+                LLM extracted structured evidence from the note. No final judgments made - only evidence collection.
+              </p>
+              
+              {/* Summary Cards */}
+              <div className="mb-4">
+                <h4 className="font-semibold text-black mb-3">Evidence Summary</h4>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+                  <div className="bg-blue-50 p-3 rounded border border-gray-300">
+                    <div className="font-semibold text-black text-xs">Injury Mentions</div>
+                    <div className="text-2xl font-bold text-black">
+                      {result.layer1Evidence.injury_mentions.length}
                     </div>
-                    <div className="bg-yellow-50 p-3 rounded border border-gray-300">
-                      <div className="font-semibold text-black">Negations</div>
-                      <div className="text-2xl font-bold text-black">
-                        {result.layer1Evidence.negations.length}
-                      </div>
+                  </div>
+                  <div className="bg-yellow-50 p-3 rounded border border-gray-300">
+                    <div className="font-semibold text-black text-xs">Negations</div>
+                    <div className="text-2xl font-bold text-black">
+                      {result.layer1Evidence.negations.length}
                     </div>
-                    <div className="bg-green-50 p-3 rounded border border-gray-300">
-                      <div className="font-semibold text-black">No Injury Statements</div>
-                      <div className="text-2xl font-bold text-black">
-                        {result.layer1Evidence.no_injury_statements.length}
-                      </div>
+                  </div>
+                  <div className="bg-green-50 p-3 rounded border border-gray-300">
+                    <div className="font-semibold text-black text-xs">No Injury Statements</div>
+                    <div className="text-2xl font-bold text-black">
+                      {result.layer1Evidence.no_injury_statements.length}
                     </div>
-                    <div className="bg-purple-50 p-3 rounded border border-gray-300">
-                      <div className="font-semibold text-black">Timing Markers</div>
-                      <div className="text-2xl font-bold text-black">
-                        {result.layer1Evidence.timing_markers.length}
-                      </div>
+                  </div>
+                  <div className="bg-purple-50 p-3 rounded border border-gray-300">
+                    <div className="font-semibold text-black text-xs">Timing Markers</div>
+                    <div className="text-2xl font-bold text-black">
+                      {result.layer1Evidence.timing_markers.length}
                     </div>
-                    <div className="bg-indigo-50 p-3 rounded border border-gray-300">
-                      <div className="font-semibold text-black">Body Sites</div>
-                      <div className="text-2xl font-bold text-black">
-                        {result.layer1Evidence.body_sites.length}
-                      </div>
+                  </div>
+                  <div className="bg-indigo-50 p-3 rounded border border-gray-300">
+                    <div className="font-semibold text-black text-xs">Body Sites</div>
+                    <div className="text-2xl font-bold text-black">
+                      {result.layer1Evidence.body_sites.length}
                     </div>
                   </div>
                 </div>
+              </div>
 
-                <div>
-                  <h4 className="font-semibold text-black mb-2">Full Evidence JSON</h4>
+              {/* Raw LLM Response */}
+              {result.rawLayer1Response && (
+                <div className="mb-4">
+                  <h4 className="font-semibold text-black mb-2">Raw LLM Response</h4>
                   <details className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                    <summary className="cursor-pointer text-sm font-medium text-black hover:underline">
-                      Click to expand Layer 1 evidence
+                    <summary className="cursor-pointer text-sm font-medium text-black hover:underline mb-2">
+                      Click to view raw LLM output
                     </summary>
-                    <pre className="mt-4 text-xs overflow-x-auto max-h-96 overflow-y-auto text-black">
-                      {JSON.stringify(result.layer1Evidence, null, 2)}
+                    <pre className="mt-2 text-xs overflow-x-auto max-h-60 overflow-y-auto text-black font-mono">
+                      {result.rawLayer1Response}
                     </pre>
                   </details>
                 </div>
+              )}
 
-                {result.usedSectionRecognizer && result.preprocessedNote && (
-                  <div>
-                    <h4 className="font-semibold text-black mb-2">Preprocessed Note (Section Recognizer)</h4>
-                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 text-sm whitespace-pre-wrap max-h-40 overflow-y-auto text-black">
-                      {result.preprocessedNote}
-                    </div>
+              {/* Full Evidence JSON */}
+              <div>
+                <h4 className="font-semibold text-black mb-2">Parsed Evidence JSON</h4>
+                <details className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <summary className="cursor-pointer text-sm font-medium text-black hover:underline mb-2">
+                    Click to expand full evidence structure
+                  </summary>
+                  <pre className="mt-2 text-xs overflow-x-auto max-h-96 overflow-y-auto text-black font-mono">
+                    {JSON.stringify(result.layer1Evidence, null, 2)}
+                  </pre>
+                </details>
+              </div>
+
+              {/* Warnings */}
+              {result.layer1Evidence.metadata.extraction_warnings.length > 0 && (
+                <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <h4 className="font-semibold text-black mb-2">⚠️ Extraction Warnings</h4>
+                  <ul className="list-disc list-inside text-sm text-black space-y-1">
+                    {result.layer1Evidence.metadata.extraction_warnings.map((warning, idx) => (
+                      <li key={idx}>{warning}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {/* Flow Arrow */}
+          {result && !result.error && (
+            <div className="flex justify-center my-2">
+              <div className="text-2xl text-black">↓</div>
+            </div>
+          )}
+
+          {/* Step 3: Layer 2 Final Output */}
+          {!result.error && (
+            <div className="bg-white rounded-lg shadow-md border-2 border-green-300 p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-shrink-0 w-8 h-8 bg-green-200 rounded-full flex items-center justify-center font-bold text-black">
+                  3
+                </div>
+                <h3 className="text-xl font-bold text-black">
+                  Step 3: Layer 2 - Deterministic Evaluation
+                </h3>
+                <span className="px-2 py-1 bg-green-100 text-black text-xs font-semibold rounded">
+                  FINAL OUTPUT
+                </span>
+              </div>
+              <p className="text-sm text-black mb-4 opacity-80">
+                Deterministic code rules evaluated Layer 1 evidence to produce final injuries. Same evidence always produces same result.
+              </p>
+              <div>
+                {result.finalInjuries.length === 0 ? (
+                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <p className="text-black italic">No injuries detected (empty array)</p>
+                    <p className="text-xs text-black opacity-70 mt-2">
+                      Evaluator determined no valid injuries based on evidence and rules.
+                    </p>
                   </div>
-                )}
-
-                {result.layer1Evidence.metadata.extraction_warnings.length > 0 && (
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                    <h4 className="font-semibold text-black mb-2">Warnings</h4>
-                    <ul className="list-disc list-inside text-sm text-black">
-                      {result.layer1Evidence.metadata.extraction_warnings.map((warning, idx) => (
-                        <li key={idx}>{warning}</li>
-                      ))}
-                    </ul>
+                ) : (
+                  <div>
+                    <div className="mb-2 text-sm text-black font-semibold">
+                      Found {result.finalInjuries.length} injury{result.finalInjuries.length !== 1 ? 'ies' : ''}:
+                    </div>
+                    <pre className="bg-green-50 p-4 rounded-lg border border-green-200 overflow-x-auto text-sm text-black font-mono">
+                      {JSON.stringify(result.finalInjuries, null, 2)}
+                    </pre>
                   </div>
                 )}
               </div>

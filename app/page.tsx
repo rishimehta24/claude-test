@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { CLAUDE_MODELS } from '@/lib/constants';
+import { ALL_MODELS, ModelInfo } from '@/lib/constants';
 import RndTab from './components/RndTab';
 
 interface Evaluation {
@@ -29,6 +29,7 @@ interface Resident {
 
 interface ModelResult {
   model: string;
+  provider?: string;
   success: boolean;
   response: any;
   rawResponse: string | null;
@@ -93,7 +94,7 @@ export default function Home() {
         },
         body: JSON.stringify({
           noteContent,
-          models: CLAUDE_MODELS,
+          models: ALL_MODELS.map(m => m.id),
         }),
       });
 
@@ -197,7 +198,7 @@ export default function Home() {
     }
 
     const confirmed = confirm(
-      `Found ${incorrectNotes.length} notes with incorrect evaluations. This will test all ${CLAUDE_MODELS.length} models for each note. Continue?`
+      `Found ${incorrectNotes.length} notes with incorrect evaluations. This will test all ${ALL_MODELS.length} models for each note. Continue?`
     );
 
     if (!confirmed) return;
@@ -220,7 +221,7 @@ export default function Home() {
           },
           body: JSON.stringify({
             noteContent: note.noteContent,
-            models: CLAUDE_MODELS,
+            models: ALL_MODELS.map(m => m.id),
           }),
         });
 
@@ -237,24 +238,22 @@ export default function Home() {
           }
         });
 
-        // Build CSV row - exactly 10 columns as requested
+        // Build CSV row with dynamic columns for all models
         const groundTruthEval = note.evaluation 
           ? `Accuracy: ${note.evaluation.accuracy} | Issues: ${note.evaluation.issues || 'None'} | Confidence: ${note.evaluation.confidence || 'N/A'} | Feedback: ${note.evaluation.feedback || ''}`
           : '';
 
-        const row = {
+        // Build row with all model columns
+        const row: Record<string, string> = {
           'Input Prompt': formatResponseForCSV(note.noteContent),
           'Original Response (claude-3-haiku)': formatResponseForCSV(note.originalResponse),
           'Ground Truth Evaluation': formatResponseForCSV(groundTruthEval),
-          'claude-3-haiku-20240307': modelResults['claude-3-haiku-20240307'] || '',
-          'claude-sonnet-4-5-20250929': modelResults['claude-sonnet-4-5-20250929'] || '',
-          'claude-haiku-4-5-20251001': modelResults['claude-haiku-4-5-20251001'] || '',
-          'claude-opus-4-5-20251101': modelResults['claude-opus-4-5-20251101'] || '',
-          'claude-opus-4-1-20250805': modelResults['claude-opus-4-1-20250805'] || '',
-          'claude-sonnet-4-20250514': modelResults['claude-sonnet-4-20250514'] || '',
-          'claude-3-7-sonnet-20250219': modelResults['claude-3-7-sonnet-20250219'] || '',
-          'claude-opus-4-20250514': modelResults['claude-opus-4-20250514'] || '',
         };
+
+        // Add all models as columns
+        ALL_MODELS.forEach((modelInfo: ModelInfo) => {
+          row[modelInfo.id] = modelResults[modelInfo.id] || '';
+        });
 
         csvRows.push(row);
 
@@ -353,41 +352,41 @@ export default function Home() {
           <RndTab />
         ) : (
           <>
-            {bulkProcessing && (
-              <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex-shrink-0">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+          {bulkProcessing && (
+            <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex-shrink-0">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                </div>
+                <div className="flex-1">
+                  <div className="text-sm font-semibold text-blue-900">
+                    Processing incorrect evaluations...
                   </div>
-                  <div className="flex-1">
-                    <div className="text-sm font-semibold text-blue-900">
-                      Processing incorrect evaluations...
-                    </div>
-                    <div className="text-xs text-blue-700 mt-1">
-                      Progress: {bulkProgress.current} of {bulkProgress.total} notes completed
-                    </div>
-                    <div className="mt-2 w-full bg-blue-200 rounded-full h-2">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%` }}
-                      ></div>
-                    </div>
+                  <div className="text-xs text-blue-700 mt-1">
+                    Progress: {bulkProgress.current} of {bulkProgress.total} notes completed
+                  </div>
+                  <div className="mt-2 w-full bg-blue-200 rounded-full h-2">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%` }}
+                    ></div>
                   </div>
                 </div>
               </div>
-            )}
-
-            <div className="mb-6">
-              <input
-                type="text"
-                placeholder="Search by resident name..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
             </div>
+          )}
 
-            <div className="space-y-4">
+        <div className="mb-6">
+          <input
+            type="text"
+            placeholder="Search by resident name..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+
+        <div className="space-y-4">
           {filteredResidents.map((resident) => {
             const isExpanded = expandedResidents.has(resident.residentName);
             const residentComparisons = comparisons[resident.residentName] || {};
@@ -678,11 +677,23 @@ export default function Home() {
                                               : 'bg-red-50'
                                           }
                                         >
-                                          <td className="border border-gray-300 px-4 py-3 font-mono text-sm text-gray-900">
-                                            {result.model}
-                                            {result.model === note.originalModel && (
-                                              <span className="ml-2 text-xs text-gray-500">(Original)</span>
-                                            )}
+                                          <td className="border border-gray-300 px-4 py-3">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                              <span className="font-mono text-sm text-gray-900">{result.model}</span>
+                                              {result.provider && (
+                                                <span className={`px-2 py-1 text-xs font-semibold rounded ${
+                                                  result.provider === 'anthropic' ? 'bg-purple-100 text-purple-800' :
+                                                  result.provider === 'openai' ? 'bg-green-100 text-green-800' :
+                                                  result.provider === 'google' ? 'bg-blue-100 text-blue-800' :
+                                                  'bg-gray-100 text-gray-800'
+                                                }`}>
+                                                  {result.provider.toUpperCase()}
+                                                </span>
+                                              )}
+                                              {result.model === note.originalModel && (
+                                                <span className="ml-2 text-xs text-gray-500">(Original)</span>
+                                              )}
+                                            </div>
                                           </td>
                                           <td className="border border-gray-300 px-4 py-3">
                                             {result.success ? (
@@ -730,10 +741,10 @@ export default function Home() {
             );
           })}
 
-              {filteredResidents.length === 0 && (
-                <div className="text-center py-12 text-gray-500">
-                  {searchQuery ? 'No residents found matching your search.' : 'No residents loaded. Please run the data extraction script.'}
-                </div>
+        {filteredResidents.length === 0 && (
+          <div className="text-center py-12 text-gray-500">
+            {searchQuery ? 'No residents found matching your search.' : 'No residents loaded. Please run the data extraction script.'}
+          </div>
               )}
             </div>
           </>
