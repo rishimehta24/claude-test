@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { ALL_MODELS, ModelInfo } from '@/lib/constants';
 import RndTab from './components/RndTab';
+import BulkTestTab from './components/BulkTestTab';
 
 interface Evaluation {
   accuracy: string;
@@ -43,7 +44,7 @@ interface ComparisonResult {
 }
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<'comparison' | 'rnd'>('comparison');
+  const [activeTab, setActiveTab] = useState<'comparison' | 'rnd' | 'bulk'>('comparison');
   const [residents, setResidents] = useState<Resident[]>([]);
   const [expandedResidents, setExpandedResidents] = useState<Set<string>>(new Set());
   const [comparisons, setComparisons] = useState<Record<string, Record<string | number, ComparisonResult>>>({});
@@ -335,6 +336,16 @@ export default function Home() {
               Model Comparison
             </button>
             <button
+              onClick={() => setActiveTab('bulk')}
+              className={`px-6 py-3 font-semibold transition-colors ${
+                activeTab === 'bulk'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Bulk Testing
+            </button>
+            <button
               onClick={() => setActiveTab('rnd')}
               className={`px-6 py-3 font-semibold transition-colors ${
                 activeTab === 'rnd'
@@ -348,7 +359,9 @@ export default function Home() {
         </div>
 
         {/* Tab Content */}
-        {activeTab === 'rnd' ? (
+        {activeTab === 'bulk' ? (
+          <BulkTestTab />
+        ) : activeTab === 'rnd' ? (
           <RndTab />
         ) : (
           <>
