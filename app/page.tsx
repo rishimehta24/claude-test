@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { ALL_MODELS, ModelInfo } from '@/lib/constants';
-import BulkTestTab from './components/BulkTestTab';
+import EvaluationTab from './components/EvaluationTab';
 import SemanticVisualizerTab from './components/SemanticVisualizerTab';
 import CostCalculatorTab from './components/CostCalculatorTab';
 import PipelineBuilderTab from './components/PipelineBuilderTab';
@@ -46,7 +46,7 @@ interface ComparisonResult {
 }
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<'comparison' | 'bulk' | 'visualizer' | 'cost' | 'pipeline'>('comparison');
+  const [activeTab, setActiveTab] = useState<'comparison' | 'evaluation' | 'visualizer' | 'cost' | 'pipeline'>('comparison');
   const [residents, setResidents] = useState<Resident[]>([]);
   const [expandedResidents, setExpandedResidents] = useState<Set<string>>(new Set());
   const [comparisons, setComparisons] = useState<Record<string, Record<string | number, ComparisonResult>>>({});
@@ -338,14 +338,14 @@ export default function Home() {
               Model Comparison
             </button>
             <button
-              onClick={() => setActiveTab('bulk')}
+              onClick={() => setActiveTab('evaluation')}
               className={`px-6 py-3 font-semibold transition-colors ${
-                activeTab === 'bulk'
+                activeTab === 'evaluation'
                   ? 'text-blue-600 border-b-2 border-blue-600'
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              Bulk Testing
+              Evaluation
             </button>
             <button
               onClick={() => setActiveTab('visualizer')}
@@ -381,8 +381,8 @@ export default function Home() {
         </div>
 
         {/* Tab Content */}
-        {activeTab === 'bulk' ? (
-          <BulkTestTab />
+        {activeTab === 'evaluation' ? (
+          <EvaluationTab />
         ) : activeTab === 'visualizer' ? (
           <SemanticVisualizerTab />
         ) : activeTab === 'cost' ? (

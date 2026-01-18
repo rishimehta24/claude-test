@@ -1,11 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { LAYER1_SYSTEM_PROMPT, LAYER1_USER_PROMPT_TEMPLATE } from '@/lib/rnd/prompts';
+import { SYSTEM_PROMPT, USER_PROMPT_TEMPLATE } from '@/lib/constants';
 import { ALL_MODELS } from '@/lib/constants';
 
 interface PipelineBlock {
   id: string;
-  type: 'input' | 'section_recognizer' | 'semantic_validation' | 'llm_extraction' | 'layer2_evaluator' | 'llm_refinement';
+  type: 'input' | 'semantic_validation' | 'llm_extraction' | 'layer2_evaluator' | 'llm_refinement' | 'llm_evaluation';
   config?: {
     modelId?: string;
     temperature?: number;
@@ -47,11 +49,11 @@ const EXAMPLE_NOTE = `Effective Date: 11/24/2025 12:15Type: RNAO - Post Fall Ass
 
 const BLOCK_DESCRIPTIONS = {
   input: 'Input Note Content',
-  section_recognizer: 'Section Recognizer (Pre-processor)',
   semantic_validation: 'Semantic Validation (Free)',
   llm_extraction: 'LLM Extraction (Layer 1)',
   layer2_evaluator: 'Layer 2 Evaluator (Deterministic)',
   llm_refinement: 'LLM Refinement (Hybrid)',
+  llm_evaluation: 'LLM Evaluation (Direct)',
 };
 
 export default function PipelineBuilderTab() {
@@ -64,6 +66,62 @@ export default function PipelineBuilderTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedBlocks, setExpandedBlocks] = useState<Set<string>>(new Set());
+  const [promptViewBlocks, setPromptViewBlocks] = useState<Set<string>>(new Set());
+  const [savedConfigs, setSavedConfigs] = useState<Array<{ id: string; name: string; blocks: PipelineBlock[] }>>([]);
+  const [configName, setConfigName] = useState('');
+
+  // Load saved configs on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('pipelineConfigs');
+    if (saved) {
+      try {
+        setSavedConfigs(JSON.parse(saved));
+      } catch (e) {
+        console.error('Failed to load saved configs:', e);
+      }
+    }
+  }, []);
+
+  const saveConfig = () => {
+    if (!configName.trim()) {
+      setError('Please enter a configuration name');
+      return;
+    }
+
+    if (blocks.length === 0 || (blocks.length === 1 && blocks[0].type === 'input')) {
+      setError('Please add at least one processing block');
+      return;
+    }
+
+    const newConfig = {
+      id: `config-${Date.now()}`,
+      name: configName.trim(),
+      blocks: blocks.filter(b => b.type !== 'input'), // Don't save input block
+    };
+
+    const updatedConfigs = [...savedConfigs, newConfig];
+    setSavedConfigs(updatedConfigs);
+    localStorage.setItem('pipelineConfigs', JSON.stringify(updatedConfigs));
+    setConfigName('');
+    setError(null);
+  };
+
+  const loadConfig = (configId: string) => {
+    const config = savedConfigs.find(c => c.id === configId);
+    if (config) {
+      setBlocks([
+        { id: 'input-1', type: 'input' },
+        ...config.blocks.map((b, idx) => ({ ...b, id: `${b.type}-${Date.now()}-${idx}` })),
+      ]);
+      setConfigName(config.name);
+    }
+  };
+
+  const deleteConfig = (configId: string) => {
+    const updatedConfigs = savedConfigs.filter(c => c.id !== configId);
+    setSavedConfigs(updatedConfigs);
+    localStorage.setItem('pipelineConfigs', JSON.stringify(updatedConfigs));
+  };
 
   const addBlock = (type: PipelineBlock['type']) => {
     const newBlock: PipelineBlock = {
@@ -148,8 +206,26 @@ export default function PipelineBuilderTab() {
       newExpanded.delete(id);
     } else {
       newExpanded.add(id);
+      // Close prompt view when opening config
+      const newPromptView = new Set(promptViewBlocks);
+      newPromptView.delete(id);
+      setPromptViewBlocks(newPromptView);
     }
     setExpandedBlocks(newExpanded);
+  };
+
+  const togglePromptView = (id: string) => {
+    const newPromptView = new Set(promptViewBlocks);
+    if (newPromptView.has(id)) {
+      newPromptView.delete(id);
+    } else {
+      newPromptView.add(id);
+      // Close config when opening prompt view
+      const newExpanded = new Set(expandedBlocks);
+      newExpanded.delete(id);
+      setExpandedBlocks(newExpanded);
+    }
+    setPromptViewBlocks(newPromptView);
   };
 
   return (
@@ -160,6 +236,32 @@ export default function PipelineBuilderTab() {
           Build custom pipelines by arranging blocks in any order. Each block processes data sequentially,
           passing output to the next block. See step-by-step results as the pipeline executes.
         </p>
+
+        {/* Saved Configs */}
+        {savedConfigs.length > 0 && (
+          <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
+            <h3 className="font-semibold mb-2">Saved Configurations</h3>
+            <div className="flex flex-wrap gap-2">
+              {savedConfigs.map((config) => (
+                <div key={config.id} className="flex items-center gap-2 px-3 py-1 bg-white border rounded">
+                  <span className="text-sm">{config.name}</span>
+                  <button
+                    onClick={() => loadConfig(config.id)}
+                    className="text-xs text-blue-600 hover:text-blue-800"
+                  >
+                    Load
+                  </button>
+                  <button
+                    onClick={() => deleteConfig(config.id)}
+                    className="text-xs text-red-600 hover:text-red-800"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Input Note */}
         <div className="mb-6">
@@ -191,12 +293,6 @@ export default function PipelineBuilderTab() {
           <h3 className="font-semibold mb-3">Available Blocks (Click to Add)</h3>
           <div className="flex flex-wrap gap-2">
             <button
-              onClick={() => addBlock('section_recognizer')}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
-            >
-              + Section Recognizer
-            </button>
-            <button
               onClick={() => addBlock('semantic_validation')}
               className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
             >
@@ -219,6 +315,12 @@ export default function PipelineBuilderTab() {
               className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm"
             >
               + LLM Refinement
+            </button>
+            <button
+              onClick={() => addBlock('llm_evaluation')}
+              className="px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 text-sm"
+            >
+              + LLM Evaluation (Direct)
             </button>
           </div>
         </div>
@@ -265,21 +367,222 @@ export default function PipelineBuilderTab() {
                         </button>
                       </>
                     )}
-                    {(block.type === 'llm_extraction' || block.type === 'llm_refinement' || block.type === 'semantic_validation') && (
+                    {block.type !== 'input' && (
+                      <button
+                        onClick={() => togglePromptView(block.id)}
+                        className="px-2 py-1 text-xs bg-blue-200 text-blue-800 rounded hover:bg-blue-300"
+                        title="View prompts and settings"
+                      >
+                        {promptViewBlocks.has(block.id) ? '📄▲' : '📄▼'}
+                      </button>
+                    )}
+                    {(block.type === 'llm_extraction' || block.type === 'llm_refinement' || block.type === 'llm_evaluation' || block.type === 'semantic_validation') && (
                       <button
                         onClick={() => toggleBlockExpansion(block.id)}
                         className="px-2 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300"
+                        title="Configure settings"
                       >
-                        {expandedBlocks.has(block.id) ? '▼' : '▶'}
+                        {expandedBlocks.has(block.id) ? '⚙️▲' : '⚙️▼'}
                       </button>
                     )}
                   </div>
                 </div>
 
+                {/* Prompt & Settings View */}
+                {promptViewBlocks.has(block.id) && (
+                  <div className="border-t p-4 bg-blue-50 space-y-4">
+                    {block.type === 'llm_extraction' && (
+                      <div className="space-y-3">
+                        <div className="font-semibold text-sm text-gray-800">LLM Extraction (Layer 1) - Prompts & Settings</div>
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-1">System Prompt</div>
+                          <div className="bg-white p-3 rounded border border-gray-300 text-xs font-mono max-h-64 overflow-y-auto whitespace-pre-wrap">
+                            {LAYER1_SYSTEM_PROMPT}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-1">User Prompt Template</div>
+                          <div className="bg-white p-3 rounded border border-gray-300 text-xs font-mono max-h-32 overflow-y-auto">
+                            {LAYER1_USER_PROMPT_TEMPLATE('{{NOTE_CONTENT}}')}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">Note: <code>{'{{NOTE_CONTENT}}'}</code> is replaced with the actual note content</div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div>
+                            <span className="font-semibold">Model:</span> {block.config?.modelId || 'claude-sonnet-4-5-20250929'}
+                          </div>
+                          <div>
+                            <span className="font-semibold">Temperature:</span> {block.config?.temperature ?? 0}
+                          </div>
+                          <div>
+                            <span className="font-semibold">Max Tokens:</span> {block.config?.maxTokens || 2000}
+                          </div>
+                          <div>
+                            <span className="font-semibold">Purpose:</span> Extract structured evidence (not final injuries)
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {block.type === 'llm_refinement' && (
+                      <div className="space-y-3">
+                        <div className="font-semibold text-sm text-gray-800">LLM Refinement - Prompts & Settings</div>
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-1">System Prompt</div>
+                          <div className="bg-white p-3 rounded border border-gray-300 text-xs font-mono max-h-32 overflow-y-auto whitespace-pre-wrap">
+                            You are a medical data analyst. Review semantic validation matches and determine actual injuries. Return ONLY a JSON array: [{`{phrase: "...", matched_injury: "..."}`}] or [] if none.
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-1">User Prompt Template</div>
+                          <div className="bg-white p-3 rounded border border-gray-300 text-xs font-mono max-h-32 overflow-y-auto whitespace-pre-wrap">
+                            ORIGINAL NOTE:
+                            {`{{NOTE_CONTENT}}`}
+
+                            SEMANTIC VALIDATION RESULTS:
+                            {`{{MATCHES_TABLE}}`}
+
+                            Return JSON array of actual injuries.
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            Note: <code>{'{{NOTE_CONTENT}}'}</code> is the original note, <code>{'{{MATCHES_TABLE}}'}</code> is a formatted table of semantic matches with similarity scores
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div>
+                            <span className="font-semibold">Model:</span> {block.config?.modelId || 'claude-haiku-4-5-20251001'}
+                          </div>
+                          <div>
+                            <span className="font-semibold">Temperature:</span> {block.config?.temperature ?? 0}
+                          </div>
+                          <div>
+                            <span className="font-semibold">Max Tokens:</span> {block.config?.maxTokens || 2000}
+                          </div>
+                          <div>
+                            <span className="font-semibold">Input:</span> Semantic validation matches table
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {block.type === 'llm_evaluation' && (
+                      <div className="space-y-3">
+                        <div className="font-semibold text-sm text-gray-800">LLM Evaluation (Direct) - Prompts & Settings</div>
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-1">System Prompt</div>
+                          <div className="bg-white p-3 rounded border border-gray-300 text-xs font-mono max-h-64 overflow-y-auto whitespace-pre-wrap">
+                            {SYSTEM_PROMPT}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-1">User Prompt Template</div>
+                          <div className="bg-white p-3 rounded border border-gray-300 text-xs font-mono max-h-32 overflow-y-auto">
+                            {USER_PROMPT_TEMPLATE('{{NOTE_CONTENT}}')}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">Note: <code>{'{{NOTE_CONTENT}}'}</code> is replaced with the actual note content</div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div>
+                            <span className="font-semibold">Model:</span> {block.config?.modelId || 'claude-sonnet-4-5-20250929'}
+                          </div>
+                          <div>
+                            <span className="font-semibold">Temperature:</span> {block.config?.temperature ?? 0.1}
+                          </div>
+                          <div>
+                            <span className="font-semibold">Max Tokens:</span> {block.config?.maxTokens || 500}
+                          </div>
+                          <div>
+                            <span className="font-semibold">Purpose:</span> Direct injury extraction (single step)
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {block.type === 'semantic_validation' && (
+                      <div className="space-y-3">
+                        <div className="font-semibold text-sm text-gray-800">Semantic Validation - Settings & Model Info</div>
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-1">Embedding Model</div>
+                          <div className="bg-white p-3 rounded border border-gray-300 text-xs">
+                            <div><span className="font-semibold">Model:</span> Xenova/all-MiniLM-L6-v2</div>
+                            <div className="mt-1"><span className="font-semibold">Provider:</span> Hugging Face (via @xenova/transformers)</div>
+                            <div className="mt-1"><span className="font-semibold">Embedding Dimensions:</span> 384</div>
+                            <div className="mt-1"><span className="font-semibold">Cost:</span> Free (runs locally in browser/Node.js)</div>
+                            <div className="mt-1"><span className="font-semibold">Method:</span> Sentence embeddings → Cosine similarity</div>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-1">Similarity Thresholds</div>
+                          <div className="bg-white p-3 rounded border border-gray-300 text-xs">
+                            <div className="grid grid-cols-3 gap-2">
+                              <div>
+                                <span className="font-semibold">Strong:</span> ≥ {((block.config?.thresholds?.strong ?? 0.7) * 100).toFixed(0)}%
+                              </div>
+                              <div>
+                                <span className="font-semibold">Medium:</span> ≥ {((block.config?.thresholds?.medium ?? 0.5) * 100).toFixed(0)}%
+                              </div>
+                              <div>
+                                <span className="font-semibold">Min:</span> ≥ {((block.config?.thresholds?.min ?? 0.3) * 100).toFixed(0)}%
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-1">How It Works</div>
+                          <div className="bg-white p-3 rounded border border-gray-300 text-xs space-y-1">
+                            <div>1. Splits note into sentences</div>
+                            <div>2. Converts each sentence to 384-dimensional embedding vector</div>
+                            <div>3. Compares with pre-computed embeddings for each allowed injury</div>
+                            <div>4. Calculates cosine similarity (0-1 scale)</div>
+                            <div>5. Categorizes matches by similarity thresholds</div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {block.type === 'layer2_evaluator' && (
+                      <div className="space-y-3">
+                        <div className="font-semibold text-sm text-gray-800">Layer 2 Evaluator (Deterministic) - Rules & Settings</div>
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-1">Deterministic Rules Applied</div>
+                          <div className="bg-white p-3 rounded border border-gray-300 text-xs space-y-2">
+                            <div><span className="font-semibold">Rule 1:</span> Filter to Allowed_Injuries only (exclude null candidates)</div>
+                            <div><span className="font-semibold">Rule 2:</span> Exclude negated mentions (is_negated=true)</div>
+                            <div><span className="font-semibold">Rule 3:</span> Handle "no injury" statements - return [] unless explicit injury after statement</div>
+                            <div><span className="font-semibold">Rule 4:</span> Prefer explicit mentions over implied/unclear</div>
+                            <div><span className="font-semibold">Rule 5:</span> Strict "pain" evaluation - require body site OR post-fall context</div>
+                            <div><span className="font-semibold">Rule 6:</span> Deduplicate by injury type, keep longest/most specific phrase</div>
+                            <div><span className="font-semibold">Rule 7:</span> Sort by position in note, then alphabetically</div>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-1">Configuration</div>
+                          <div className="bg-white p-3 rounded border border-gray-300 text-xs">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div><span className="font-semibold">excludeNegated:</span> true</div>
+                              <div><span className="font-semibold">respectNoInjuryStatements:</span> true</div>
+                              <div><span className="font-semibold">preferExplicit:</span> true</div>
+                              <div><span className="font-semibold">strictPainEvaluation:</span> true</div>
+                              <div><span className="font-semibold">requireExactMatch:</span> true</div>
+                              <div><span className="font-semibold">Cost:</span> Free (pure TypeScript code)</div>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-1">Input Required</div>
+                          <div className="bg-white p-3 rounded border border-gray-300 text-xs">
+                            Layer 1 Evidence from LLM Extraction block (must include layer1Evidence in output)
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Expanded Config */}
                 {expandedBlocks.has(block.id) && (
                   <div className="border-t p-3 bg-white space-y-2">
-                    {block.type === 'llm_extraction' || block.type === 'llm_refinement' ? (
+                    {block.type === 'llm_extraction' || block.type === 'llm_refinement' || block.type === 'llm_evaluation' ? (
                       <>
                         <div>
                           <label className="block text-xs font-medium mb-1">Model</label>
@@ -383,6 +686,27 @@ export default function PipelineBuilderTab() {
           </div>
         </div>
 
+        {/* Save Config */}
+        <div className="border-t pt-4 mb-6">
+          <h3 className="font-semibold mb-3">Save Configuration</h3>
+          <div className="flex gap-3">
+            <input
+              type="text"
+              value={configName}
+              onChange={(e) => setConfigName(e.target.value)}
+              placeholder="e.g., Semantic + Haiku Refinement"
+              className="flex-1 p-2 border border-gray-300 rounded-md"
+            />
+            <button
+              onClick={saveConfig}
+              disabled={!configName.trim() || blocks.length === 0}
+              className="px-6 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50"
+            >
+              Save Config
+            </button>
+          </div>
+        </div>
+
         {/* Execute Button */}
         <div className="flex gap-3">
           <button
@@ -471,29 +795,113 @@ export default function PipelineBuilderTab() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {result.blockType === 'section_recognizer' && (
-                      <div>
-                        <div className="text-xs font-semibold text-gray-600 mb-1">Processed Note (Shortened)</div>
-                        <div className="text-sm bg-white p-2 rounded border border-gray-200 max-h-32 overflow-y-auto">
-                          {result.output?.noteContent?.substring(0, 500)}...
-                        </div>
-                      </div>
-                    )}
-
                     {result.blockType === 'semantic_validation' && (
-                      <div>
-                        <div className="text-xs font-semibold text-gray-600 mb-2">Semantic Matches</div>
-                        <div className="grid grid-cols-3 gap-2 text-sm">
-                          <div className="p-2 bg-green-100 rounded">
-                            Strong: {result.output?.matches?.strong?.length || 0}
-                          </div>
-                          <div className="p-2 bg-yellow-100 rounded">
-                            Medium: {result.output?.matches?.medium?.length || 0}
-                          </div>
-                          <div className="p-2 bg-orange-100 rounded">
-                            Weak: {result.output?.matches?.weak?.length || 0}
+                      <div className="space-y-4">
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-2">Semantic Matches Summary</div>
+                          <div className="grid grid-cols-3 gap-2 text-sm">
+                            <div className="p-2 bg-green-100 rounded">
+                              Strong: {result.output?.matches?.strong?.length || 0}
+                            </div>
+                            <div className="p-2 bg-yellow-100 rounded">
+                              Medium: {result.output?.matches?.medium?.length || 0}
+                            </div>
+                            <div className="p-2 bg-orange-100 rounded">
+                              Weak: {result.output?.matches?.weak?.length || 0}
+                            </div>
                           </div>
                         </div>
+
+                        {/* Detailed Matches Table */}
+                        {(result.output?.matches?.strong?.length > 0 || 
+                          result.output?.matches?.medium?.length > 0 || 
+                          result.output?.matches?.weak?.length > 0) && (
+                          <div>
+                            <div className="text-xs font-semibold text-gray-600 mb-2">Detailed Matches</div>
+                            <div className="overflow-x-auto border rounded-md">
+                              <table className="w-full text-sm">
+                                <thead className="bg-gray-100">
+                                  <tr className="border-b">
+                                    <th className="text-left p-2">Category</th>
+                                    <th className="text-left p-2">Sentence from Note</th>
+                                    <th className="text-left p-2">Matched Injury</th>
+                                    <th className="text-left p-2">Similarity</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {/* Strong Matches */}
+                                  {result.output?.matches?.strong?.map((match: any, idx: number) => (
+                                    <tr key={`strong-${idx}`} className="border-b bg-green-50">
+                                      <td className="p-2">
+                                        <span className="px-2 py-1 bg-green-600 text-white rounded text-xs font-semibold">
+                                          Strong
+                                        </span>
+                                      </td>
+                                      <td className="p-2 font-mono text-xs max-w-md">
+                                        "{match.sentence || match.text || ''}"
+                                      </td>
+                                      <td className="p-2 font-semibold text-green-700">
+                                        {match.matchedInjury || match.matched_injury || 'N/A'}
+                                      </td>
+                                      <td className="p-2 font-mono font-semibold text-green-700">
+                                        {((match.similarity || 0) * 100).toFixed(1)}%
+                                      </td>
+                                    </tr>
+                                  ))}
+                                  
+                                  {/* Medium Matches */}
+                                  {result.output?.matches?.medium?.map((match: any, idx: number) => (
+                                    <tr key={`medium-${idx}`} className="border-b bg-yellow-50">
+                                      <td className="p-2">
+                                        <span className="px-2 py-1 bg-yellow-600 text-white rounded text-xs font-semibold">
+                                          Medium
+                                        </span>
+                                      </td>
+                                      <td className="p-2 font-mono text-xs max-w-md">
+                                        "{match.sentence || match.text || ''}"
+                                      </td>
+                                      <td className="p-2 font-semibold text-yellow-700">
+                                        {match.matchedInjury || match.matched_injury || 'N/A'}
+                                      </td>
+                                      <td className="p-2 font-mono font-semibold text-yellow-700">
+                                        {((match.similarity || 0) * 100).toFixed(1)}%
+                                      </td>
+                                    </tr>
+                                  ))}
+                                  
+                                  {/* Weak Matches */}
+                                  {result.output?.matches?.weak?.map((match: any, idx: number) => (
+                                    <tr key={`weak-${idx}`} className="border-b bg-orange-50">
+                                      <td className="p-2">
+                                        <span className="px-2 py-1 bg-orange-600 text-white rounded text-xs font-semibold">
+                                          Weak
+                                        </span>
+                                      </td>
+                                      <td className="p-2 font-mono text-xs max-w-md">
+                                        "{match.sentence || match.text || ''}"
+                                      </td>
+                                      <td className="p-2 font-semibold text-orange-700">
+                                        {match.matchedInjury || match.matched_injury || 'N/A'}
+                                      </td>
+                                      <td className="p-2 font-mono font-semibold text-orange-700">
+                                        {((match.similarity || 0) * 100).toFixed(1)}%
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* No Matches Message */}
+                        {(!result.output?.matches?.strong?.length && 
+                          !result.output?.matches?.medium?.length && 
+                          !result.output?.matches?.weak?.length) && (
+                          <div className="p-3 bg-gray-50 border border-gray-200 rounded text-gray-500 text-sm">
+                            No semantic matches found above the minimum threshold.
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -536,6 +944,21 @@ export default function PipelineBuilderTab() {
                       <div>
                         <div className="text-xs font-semibold text-gray-600 mb-1">
                           Final Injuries (LLM Refined): {result.output.finalInjuries.length}
+                        </div>
+                        <div className="text-sm bg-white p-2 rounded border border-gray-200">
+                          {result.output.finalInjuries.length > 0 ? (
+                            <pre className="text-xs">{JSON.stringify(result.output.finalInjuries, null, 2)}</pre>
+                          ) : (
+                            <span className="text-gray-500">No injuries found</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {result.blockType === 'llm_evaluation' && result.output?.finalInjuries && (
+                      <div>
+                        <div className="text-xs font-semibold text-gray-600 mb-1">
+                          Final Injuries (LLM Evaluated): {result.output.finalInjuries.length}
                         </div>
                         <div className="text-sm bg-white p-2 rounded border border-gray-200">
                           {result.output.finalInjuries.length > 0 ? (

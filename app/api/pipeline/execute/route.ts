@@ -4,7 +4,6 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { extractRelevantSections } from '@/lib/rnd/section-recognizer';
 import { runPipeline, Layer1Evidence } from '@/lib/rnd/pipeline';
 import { evaluateEvidence } from '@/lib/rnd/evaluator';
 import { findSimilarSentences, validateSemantically } from '@/lib/semantic-validator';
@@ -13,12 +12,13 @@ import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ALL_MODELS, ALLOWED_INJURIES } from '@/lib/rnd/schema';
 import { LAYER1_SYSTEM_PROMPT, LAYER1_USER_PROMPT_TEMPLATE } from '@/lib/rnd/prompts';
+import { SYSTEM_PROMPT, USER_PROMPT_TEMPLATE } from '@/lib/constants';
 
 export const runtime = 'nodejs';
 
-interface PipelineBlock {
+export interface PipelineBlock {
   id: string;
-  type: 'input' | 'section_recognizer' | 'semantic_validation' | 'llm_extraction' | 'layer2_evaluator' | 'llm_refinement';
+  type: 'input' | 'semantic_validation' | 'llm_extraction' | 'layer2_evaluator' | 'llm_refinement' | 'llm_evaluation';
   config?: {
     modelId?: string;
     temperature?: number;
@@ -31,7 +31,7 @@ interface PipelineBlock {
   };
 }
 
-interface BlockResult {
+export interface BlockResult {
   blockId: string;
   blockType: string;
   input: any;
@@ -61,7 +61,8 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'gemini-1.5-flash-latest': { input: 0.1, output: 0.4 },
 };
 
-async function executeBlock(
+// Export executeBlock for use in batch evaluation
+export async function executeBlock(
   block: PipelineBlock,
   input: any,
   apiKey: string
@@ -80,14 +81,6 @@ async function executeBlock(
       case 'input':
         // Input block just passes through the note content
         blockResult.output = { noteContent: input.noteContent || input };
-        blockResult.metadata = { tokens: { input: 0, output: 0 }, cost: 0 };
-        break;
-
-      case 'section_recognizer':
-        // Pre-processor: Extract relevant sections
-        const noteContent = input.noteContent || input;
-        const { relevantText } = extractRelevantSections(noteContent);
-        blockResult.output = { noteContent: relevantText, originalNote: noteContent };
         blockResult.metadata = { tokens: { input: 0, output: 0 }, cost: 0 };
         break;
 
@@ -252,6 +245,56 @@ async function executeBlock(
         blockResult.metadata = {
           tokens: { input: refineActualInputTokens, output: refineOutputTokens },
           cost: refineCost,
+        };
+        break;
+
+      case 'llm_evaluation':
+        // LLM Evaluation: Direct evaluation using original SYSTEM_PROMPT approach
+        const noteForEval = input.noteContent || input;
+        const evalModelId = block.config?.modelId || 'claude-sonnet-4-5-20250929';
+        const evalTemperature = block.config?.temperature ?? 0.1;
+        const evalMaxTokens = block.config?.maxTokens || 500;
+
+        const anthropicEval = new Anthropic({ apiKey });
+        const evalUserPrompt = USER_PROMPT_TEMPLATE(noteForEval);
+        const evalInputTokens = estimateTokens(SYSTEM_PROMPT + evalUserPrompt);
+
+        const evalMessage = await anthropicEval.messages.create({
+          model: evalModelId,
+          max_tokens: evalMaxTokens,
+          temperature: evalTemperature,
+          system: SYSTEM_PROMPT,
+          messages: [{ role: 'user', content: evalUserPrompt }],
+        });
+
+        const evalContent = evalMessage.content[0];
+        const evalResponse = evalContent.type === 'text' ? evalContent.text : '';
+        const evalOutputTokens = evalMessage.usage.output_tokens;
+        const evalActualInputTokens = evalMessage.usage.input_tokens;
+
+        // Parse JSON response (should be array of injuries)
+        let evaluatedInjuries: Array<{ phrase: string; matched_injury: string }> = [];
+        try {
+          const jsonMatch = evalResponse.match(/\[[\s\S]*\]/);
+          if (jsonMatch) {
+            evaluatedInjuries = JSON.parse(jsonMatch[0]);
+          }
+        } catch (e) {
+          // Continue with empty array if parse fails
+        }
+
+        const evalPricing = MODEL_PRICING[evalModelId] || { input: 3.0, output: 15.0 };
+        const evalCost = (evalActualInputTokens / 1_000_000) * evalPricing.input + 
+                        (evalOutputTokens / 1_000_000) * evalPricing.output;
+
+        blockResult.output = {
+          finalInjuries: evaluatedInjuries,
+          llmResponse: evalResponse,
+          noteContent: noteForEval,
+        };
+        blockResult.metadata = {
+          tokens: { input: evalActualInputTokens, output: evalOutputTokens },
+          cost: evalCost,
         };
         break;
 
