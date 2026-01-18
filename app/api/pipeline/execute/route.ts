@@ -18,11 +18,14 @@ export const runtime = 'nodejs';
 
 export interface PipelineBlock {
   id: string;
-  type: 'input' | 'semantic_validation' | 'llm_extraction' | 'layer2_evaluator' | 'llm_refinement' | 'llm_evaluation';
+  type: 'input' | 'semantic_validation' | 'llm_extraction' | 'layer2_evaluator' | 'llm_refinement' | 'llm_evaluation' | 'double_layer_llm';
   config?: {
     modelId?: string;
+    modelId2?: string; // For double_layer_llm - second model
     temperature?: number;
+    temperature2?: number; // For double_layer_llm - second model temperature
     maxTokens?: number;
+    maxTokens2?: number; // For double_layer_llm - second model max tokens
     thresholds?: {
       strong?: number;
       medium?: number;
@@ -165,15 +168,23 @@ export async function executeBlock(
 
       case 'layer2_evaluator':
         // Layer 2: Deterministic evaluation
-        const evidence = input.layer1Evidence;
-        if (!evidence) {
-          throw new Error('Layer 1 evidence required for Layer 2 evaluation');
+        // NOTE: This block requires Layer 1 evidence (structured JSON from LLM Extraction)
+        // It CANNOT work standalone with raw note content - it needs the structured evidence format
+        const evidenceForLayer2 = input.layer1Evidence;
+        
+        if (!evidenceForLayer2) {
+          // Check if we have raw note content - if so, suggest using a different Layer 2 block
+          const noteContent = input.noteContent || (typeof input === 'string' ? input : null);
+          if (noteContent) {
+            throw new Error('Layer 2 Evaluator requires Layer 1 evidence (from LLM Extraction block). For standalone use with raw note content, use "LLM Evaluation (Direct)" or "Double Layer LLM Analysis" instead.');
+          }
+          throw new Error('Layer 1 evidence required for Layer 2 evaluation. Use LLM Extraction first.');
         }
 
-        const finalInjuries = evaluateEvidence(evidence);
+        const finalInjuries = evaluateEvidence(evidenceForLayer2);
         blockResult.output = {
           finalInjuries,
-          layer1Evidence: evidence,
+          layer1Evidence: evidenceForLayer2,
           noteContent: input.noteContent || input,
         };
         blockResult.metadata = { tokens: { input: 0, output: 0 }, cost: 0 };
@@ -181,12 +192,13 @@ export async function executeBlock(
 
       case 'llm_refinement':
         // LLM refinement (like semantic + LLM hybrid)
+        // Can accept semantic matches OR raw note content (works standalone but less effective)
         const semanticMatches = input.matches;
-        const noteForRefinement = input.noteContent || input;
+        const noteForRefinement = input.noteContent || (typeof input === 'string' ? input : input.noteContent) || '';
         const refineModelId = block.config?.modelId || 'claude-haiku-4-5-20251001';
 
         if (!semanticMatches) {
-          throw new Error('Semantic matches required for LLM refinement');
+          throw new Error('Semantic matches required for LLM refinement. Use Semantic Validation first.');
         }
 
         // Format matches table
@@ -250,7 +262,8 @@ export async function executeBlock(
 
       case 'llm_evaluation':
         // LLM Evaluation: Direct evaluation using original SYSTEM_PROMPT approach
-        const noteForEval = input.noteContent || input;
+        // Works standalone - accepts raw note content directly
+        const noteForEval = input.noteContent || (typeof input === 'string' ? input : '');
         const evalModelId = block.config?.modelId || 'claude-sonnet-4-5-20250929';
         const evalTemperature = block.config?.temperature ?? 0.1;
         const evalMaxTokens = block.config?.maxTokens || 500;
@@ -295,6 +308,121 @@ export async function executeBlock(
         blockResult.metadata = {
           tokens: { input: evalActualInputTokens, output: evalOutputTokens },
           cost: evalCost,
+        };
+        break;
+
+      case 'double_layer_llm':
+        // Double Layer LLM: Two LLMs analyze same input, combine via Jaccard similarity
+        const noteForDoubleLayer = input.noteContent || (typeof input === 'string' ? input : '');
+        const model1Id = block.config?.modelId || 'claude-sonnet-4-5-20250929';
+        const model2Id = block.config?.modelId2 || 'claude-haiku-4-5-20251001';
+        const temp1 = block.config?.temperature ?? 0.1;
+        const temp2 = block.config?.temperature2 ?? 0.1;
+        const maxTokens1 = block.config?.maxTokens || 500;
+        const maxTokens2 = block.config?.maxTokens2 || 500;
+
+        // Run both LLMs in parallel
+        const anthropic1 = new Anthropic({ apiKey });
+        const anthropic2 = new Anthropic({ apiKey });
+        const userPrompt1 = USER_PROMPT_TEMPLATE(noteForDoubleLayer);
+        const userPrompt2 = USER_PROMPT_TEMPLATE(noteForDoubleLayer);
+
+        const [message1, message2] = await Promise.all([
+          anthropic1.messages.create({
+            model: model1Id,
+            max_tokens: maxTokens1,
+            temperature: temp1,
+            system: SYSTEM_PROMPT,
+            messages: [{ role: 'user', content: userPrompt1 }],
+          }),
+          anthropic2.messages.create({
+            model: model2Id,
+            max_tokens: maxTokens2,
+            temperature: temp2,
+            system: SYSTEM_PROMPT,
+            messages: [{ role: 'user', content: userPrompt2 }],
+          }),
+        ]);
+
+        // Parse both responses
+        const content1 = message1.content[0];
+        const response1 = content1.type === 'text' ? content1.text : '';
+        const content2 = message2.content[0];
+        const response2 = content2.type === 'text' ? content2.text : '';
+
+        let injuries1: Array<{ phrase: string; matched_injury: string }> = [];
+        let injuries2: Array<{ phrase: string; matched_injury: string }> = [];
+
+        try {
+          const jsonMatch1 = response1.match(/\[[\s\S]*\]/);
+          if (jsonMatch1) {
+            injuries1 = JSON.parse(jsonMatch1[0]);
+          }
+        } catch (e) {
+          console.error('Failed to parse LLM 1 response:', e);
+        }
+
+        try {
+          const jsonMatch2 = response2.match(/\[[\s\S]*\]/);
+          if (jsonMatch2) {
+            injuries2 = JSON.parse(jsonMatch2[0]);
+          }
+        } catch (e) {
+          console.error('Failed to parse LLM 2 response:', e);
+        }
+
+        // Calculate Jaccard similarity and combine results
+        const set1 = new Set(injuries1.map(i => i.matched_injury));
+        const set2 = new Set(injuries2.map(i => i.matched_injury));
+
+        // Intersection (injuries both LLMs agree on)
+        const intersection = new Set([...set1].filter(x => set2.has(x)));
+        
+        // Union (all injuries from both LLMs)
+        const union = new Set([...set1, ...set2]);
+
+        // Jaccard similarity = |intersection| / |union|
+        const jaccardSimilarity = union.size === 0 ? 0 : intersection.size / union.size;
+
+        // Final output: Use intersection (injuries both LLMs agree on)
+        // Create a map to preserve phrases (prefer from LLM1, fallback to LLM2)
+        const injuryMap = new Map<string, { phrase: string; matched_injury: string }>();
+        
+        // Add injuries from intersection, prioritizing LLM1
+        for (const injury of intersection) {
+          const fromLLM1 = injuries1.find(i => i.matched_injury === injury);
+          const fromLLM2 = injuries2.find(i => i.matched_injury === injury);
+          injuryMap.set(injury, fromLLM1 || fromLLM2!);
+        }
+
+        const finalCombinedInjuries = Array.from(injuryMap.values());
+
+        // Calculate costs
+        const pricing1 = MODEL_PRICING[model1Id] || { input: 3.0, output: 15.0 };
+        const pricing2 = MODEL_PRICING[model2Id] || { input: 1.0, output: 5.0 };
+        const cost1 = (message1.usage.input_tokens / 1_000_000) * pricing1.input + 
+                      (message1.usage.output_tokens / 1_000_000) * pricing1.output;
+        const cost2 = (message2.usage.input_tokens / 1_000_000) * pricing2.input + 
+                      (message2.usage.output_tokens / 1_000_000) * pricing2.output;
+        const totalCost = cost1 + cost2;
+
+        blockResult.output = {
+          finalInjuries: finalCombinedInjuries,
+          llm1Response: response1,
+          llm2Response: response2,
+          llm1Injuries: injuries1,
+          llm2Injuries: injuries2,
+          jaccardSimilarity,
+          intersection: Array.from(intersection),
+          union: Array.from(union),
+          noteContent: noteForDoubleLayer,
+        };
+        blockResult.metadata = {
+          tokens: { 
+            input: message1.usage.input_tokens + message2.usage.input_tokens,
+            output: message1.usage.output_tokens + message2.usage.output_tokens
+          },
+          cost: totalCost,
         };
         break;
 

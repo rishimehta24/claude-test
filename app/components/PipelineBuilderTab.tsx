@@ -54,6 +54,23 @@ const BLOCK_DESCRIPTIONS = {
   layer2_evaluator: 'Layer 2 Evaluator (Deterministic)',
   llm_refinement: 'LLM Refinement (Hybrid)',
   llm_evaluation: 'LLM Evaluation (Direct)',
+  double_layer_llm: 'Double Layer LLM Analysis',
+};
+
+const LAYER1_BLOCKS = ['semantic_validation', 'llm_extraction'];
+const LAYER2_BLOCKS = ['layer2_evaluator', 'llm_refinement', 'llm_evaluation', 'double_layer_llm'];
+
+const BLOCK_CATEGORIES = {
+  layer1: {
+    title: 'Layer 1: Preprocessing & Evidence Extraction',
+    description: 'These blocks preprocess, extract, or summarize information from the note. They do NOT produce final injuries.',
+    blocks: LAYER1_BLOCKS,
+  },
+  layer2: {
+    title: 'Layer 2: Classification & Final Injury Extraction',
+    description: 'These blocks produce final injuries. They can work standalone (direct from raw note) or after Layer 1 preprocessing.',
+    blocks: LAYER2_BLOCKS,
+  },
 };
 
 export default function PipelineBuilderTab() {
@@ -137,6 +154,13 @@ export default function PipelineBuilderTab() {
         modelId: 'claude-haiku-4-5-20251001',
         temperature: 0,
         maxTokens: 2000,
+      } : type === 'double_layer_llm' ? {
+        modelId: 'claude-sonnet-4-5-20250929',
+        modelId2: 'claude-haiku-4-5-20251001',
+        temperature: 0.1,
+        temperature2: 0.1,
+        maxTokens: 500,
+        maxTokens2: 500,
       } : undefined,
     };
     setBlocks([...blocks, newBlock]);
@@ -289,39 +313,57 @@ export default function PipelineBuilderTab() {
         </div>
 
         {/* Available Blocks */}
-        <div className="border-t pt-4 mb-6">
-          <h3 className="font-semibold mb-3">Available Blocks (Click to Add)</h3>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => addBlock('semantic_validation')}
-              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
-            >
-              + Semantic Validation (Free)
-            </button>
-            <button
-              onClick={() => addBlock('llm_extraction')}
-              className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm"
-            >
-              + LLM Extraction
-            </button>
-            <button
-              onClick={() => addBlock('layer2_evaluator')}
-              className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 text-sm"
-            >
-              + Layer 2 Evaluator (Free)
-            </button>
-            <button
-              onClick={() => addBlock('llm_refinement')}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm"
-            >
-              + LLM Refinement
-            </button>
-            <button
-              onClick={() => addBlock('llm_evaluation')}
-              className="px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 text-sm"
-            >
-              + LLM Evaluation (Direct)
-            </button>
+        <div className="border-t pt-4 mb-6 space-y-6">
+          {/* Layer 1 Blocks */}
+          <div>
+            <h3 className="font-semibold mb-1 text-gray-800">{BLOCK_CATEGORIES.layer1.title}</h3>
+            <p className="text-xs text-gray-600 mb-3">{BLOCK_CATEGORIES.layer1.description}</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => addBlock('semantic_validation')}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
+              >
+                + Semantic Validation (Free)
+              </button>
+              <button
+                onClick={() => addBlock('llm_extraction')}
+                className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm"
+              >
+                + LLM Extraction
+              </button>
+            </div>
+          </div>
+
+          {/* Layer 2 Blocks */}
+          <div>
+            <h3 className="font-semibold mb-1 text-gray-800">{BLOCK_CATEGORIES.layer2.title}</h3>
+            <p className="text-xs text-gray-600 mb-3">{BLOCK_CATEGORIES.layer2.description}</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => addBlock('layer2_evaluator')}
+                className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 text-sm"
+              >
+                + Layer 2 Evaluator (Free)
+              </button>
+              <button
+                onClick={() => addBlock('llm_refinement')}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm"
+              >
+                + LLM Refinement
+              </button>
+              <button
+                onClick={() => addBlock('llm_evaluation')}
+                className="px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 text-sm"
+              >
+                + LLM Evaluation (Direct)
+              </button>
+              <button
+                onClick={() => addBlock('double_layer_llm')}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm"
+              >
+                + Double Layer LLM Analysis
+              </button>
+            </div>
           </div>
         </div>
 
@@ -336,10 +378,13 @@ export default function PipelineBuilderTab() {
                   <div className="flex-1">
                     <span className={`px-3 py-1 rounded text-sm font-semibold ${
                       block.type === 'input' ? 'bg-gray-100 text-gray-800' :
-                      block.type === 'semantic_validation' || block.type === 'layer2_evaluator' ? 'bg-green-100 text-green-800' :
+                      LAYER1_BLOCKS.includes(block.type) ? 'bg-purple-100 text-purple-800' :
+                      LAYER2_BLOCKS.includes(block.type) ? 'bg-orange-100 text-orange-800' :
                       'bg-blue-100 text-blue-800'
                     }`}>
                       {BLOCK_DESCRIPTIONS[block.type]}
+                      {LAYER1_BLOCKS.includes(block.type) && ' [Layer 1]'}
+                      {LAYER2_BLOCKS.includes(block.type) && ' [Layer 2]'}
                     </span>
                   </div>
                   <div className="flex gap-1">
@@ -376,7 +421,7 @@ export default function PipelineBuilderTab() {
                         {promptViewBlocks.has(block.id) ? '📄▲' : '📄▼'}
                       </button>
                     )}
-                    {(block.type === 'llm_extraction' || block.type === 'llm_refinement' || block.type === 'llm_evaluation' || block.type === 'semantic_validation') && (
+                    {(block.type === 'llm_extraction' || block.type === 'llm_refinement' || block.type === 'llm_evaluation' || block.type === 'semantic_validation' || block.type === 'double_layer_llm') && (
                       <button
                         onClick={() => toggleBlockExpansion(block.id)}
                         className="px-2 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300"
@@ -394,6 +439,12 @@ export default function PipelineBuilderTab() {
                     {block.type === 'llm_extraction' && (
                       <div className="space-y-3">
                         <div className="font-semibold text-sm text-gray-800">LLM Extraction (Layer 1) - Prompts & Settings</div>
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-1">Purpose</div>
+                          <div className="bg-white p-3 rounded border border-gray-300 text-xs">
+                            Preprocessing - Extracts structured evidence (injury mentions, negations, timing, etc.). Does NOT produce final injuries.
+                          </div>
+                        </div>
                         <div>
                           <div className="text-xs font-semibold text-gray-600 mb-1">System Prompt</div>
                           <div className="bg-white p-3 rounded border border-gray-300 text-xs font-mono max-h-64 overflow-y-auto whitespace-pre-wrap">
@@ -427,6 +478,12 @@ export default function PipelineBuilderTab() {
                     {block.type === 'llm_refinement' && (
                       <div className="space-y-3">
                         <div className="font-semibold text-sm text-gray-800">LLM Refinement - Prompts & Settings</div>
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-1">Purpose</div>
+                          <div className="bg-white p-3 rounded border border-gray-300 text-xs">
+                            Classification - Produces final injuries by having LLM evaluate semantic validation matches table
+                          </div>
+                        </div>
                         <div>
                           <div className="text-xs font-semibold text-gray-600 mb-1">System Prompt</div>
                           <div className="bg-white p-3 rounded border border-gray-300 text-xs font-mono max-h-32 overflow-y-auto whitespace-pre-wrap">
@@ -469,6 +526,12 @@ export default function PipelineBuilderTab() {
                       <div className="space-y-3">
                         <div className="font-semibold text-sm text-gray-800">LLM Evaluation (Direct) - Prompts & Settings</div>
                         <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-1">Purpose</div>
+                          <div className="bg-white p-3 rounded border border-gray-300 text-xs">
+                            Classification - Produces final injuries directly from raw note content (single-step, works standalone)
+                          </div>
+                        </div>
+                        <div>
                           <div className="text-xs font-semibold text-gray-600 mb-1">System Prompt</div>
                           <div className="bg-white p-3 rounded border border-gray-300 text-xs font-mono max-h-64 overflow-y-auto whitespace-pre-wrap">
                             {SYSTEM_PROMPT}
@@ -501,6 +564,12 @@ export default function PipelineBuilderTab() {
                     {block.type === 'semantic_validation' && (
                       <div className="space-y-3">
                         <div className="font-semibold text-sm text-gray-800">Semantic Validation - Settings & Model Info</div>
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-1">Purpose</div>
+                          <div className="bg-white p-3 rounded border border-gray-300 text-xs">
+                            Preprocessing - Finds semantically similar sentences to injury terms. Outputs a table of matches, NOT final injuries.
+                          </div>
+                        </div>
                         <div>
                           <div className="text-xs font-semibold text-gray-600 mb-1">Embedding Model</div>
                           <div className="bg-white p-3 rounded border border-gray-300 text-xs">
@@ -540,9 +609,57 @@ export default function PipelineBuilderTab() {
                       </div>
                     )}
 
+                    {block.type === 'double_layer_llm' && (
+                      <div className="space-y-3">
+                        <div className="font-semibold text-sm text-gray-800">Double Layer LLM Analysis - Prompts & Settings</div>
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-1">Purpose</div>
+                          <div className="bg-white p-3 rounded border border-gray-300 text-xs">
+                            Classification - Produces final injuries by combining two LLM outputs via consensus (Jaccard intersection). Works standalone with raw note content.
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-1">How It Works</div>
+                          <div className="bg-white p-3 rounded border border-gray-300 text-xs space-y-2">
+                            <div>1. Two LLMs analyze the same input text independently</div>
+                            <div>2. Both LLMs output their injury lists</div>
+                            <div>3. Calculate Jaccard similarity: |intersection| / |union|</div>
+                            <div>4. Final output: Intersection (injuries both LLMs agree on)</div>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-1">Models</div>
+                          <div className="bg-white p-3 rounded border border-gray-300 text-xs">
+                            <div><span className="font-semibold">Model 1:</span> {block.config?.modelId || 'claude-sonnet-4-5-20250929'}</div>
+                            <div className="mt-1"><span className="font-semibold">Model 2:</span> {block.config?.modelId2 || 'claude-haiku-4-5-20251001'}</div>
+                            <div className="mt-1"><span className="font-semibold">Temperature 1:</span> {block.config?.temperature ?? 0.1}</div>
+                            <div className="mt-1"><span className="font-semibold">Temperature 2:</span> {block.config?.temperature2 ?? 0.1}</div>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-1">System Prompt (Both LLMs Use Same Prompt)</div>
+                          <div className="bg-white p-3 rounded border border-gray-300 text-xs font-mono max-h-32 overflow-y-auto whitespace-pre-wrap">
+                            {SYSTEM_PROMPT.substring(0, 500)}...
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-1">Input</div>
+                          <div className="bg-white p-3 rounded border border-gray-300 text-xs">
+                            Can accept raw note content directly (works standalone) or processed output from Layer 1
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {block.type === 'layer2_evaluator' && (
                       <div className="space-y-3">
                         <div className="font-semibold text-sm text-gray-800">Layer 2 Evaluator (Deterministic) - Rules & Settings</div>
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-1">Purpose</div>
+                          <div className="bg-white p-3 rounded border border-gray-300 text-xs">
+                            Classification - Produces final injuries by applying deterministic rules to Layer 1 evidence. Requires Layer 1 (LLM Extraction) output - cannot work standalone.
+                          </div>
+                        </div>
                         <div>
                           <div className="text-xs font-semibold text-gray-600 mb-1">Deterministic Rules Applied</div>
                           <div className="bg-white p-3 rounded border border-gray-300 text-xs space-y-2">
@@ -582,7 +699,88 @@ export default function PipelineBuilderTab() {
                 {/* Expanded Config */}
                 {expandedBlocks.has(block.id) && (
                   <div className="border-t p-3 bg-white space-y-2">
-                    {block.type === 'llm_extraction' || block.type === 'llm_refinement' || block.type === 'llm_evaluation' ? (
+                    {block.type === 'double_layer_llm' ? (
+                      <>
+                        <div>
+                          <label className="block text-xs font-medium mb-1">Model 1</label>
+                          <select
+                            value={block.config?.modelId || ''}
+                            onChange={(e) => updateBlockConfig(block.id, { modelId: e.target.value })}
+                            className="w-full p-2 border border-gray-300 rounded-md text-sm"
+                          >
+                            {ALL_MODELS.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.displayName}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-xs font-medium mb-1">Temperature 1</label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="1"
+                              step="0.1"
+                              value={block.config?.temperature ?? 0.1}
+                              onChange={(e) => updateBlockConfig(block.id, { temperature: parseFloat(e.target.value) })}
+                              className="w-full p-2 border border-gray-300 rounded-md text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium mb-1">Max Tokens 1</label>
+                            <input
+                              type="number"
+                              min="100"
+                              max="8000"
+                              value={block.config?.maxTokens || 500}
+                              onChange={(e) => updateBlockConfig(block.id, { maxTokens: parseInt(e.target.value) })}
+                              className="w-full p-2 border border-gray-300 rounded-md text-sm"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium mb-1">Model 2</label>
+                          <select
+                            value={block.config?.modelId2 || ''}
+                            onChange={(e) => updateBlockConfig(block.id, { modelId2: e.target.value })}
+                            className="w-full p-2 border border-gray-300 rounded-md text-sm"
+                          >
+                            {ALL_MODELS.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.displayName}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-xs font-medium mb-1">Temperature 2</label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="1"
+                              step="0.1"
+                              value={block.config?.temperature2 ?? 0.1}
+                              onChange={(e) => updateBlockConfig(block.id, { temperature2: parseFloat(e.target.value) })}
+                              className="w-full p-2 border border-gray-300 rounded-md text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium mb-1">Max Tokens 2</label>
+                            <input
+                              type="number"
+                              min="100"
+                              max="8000"
+                              value={block.config?.maxTokens2 || 500}
+                              onChange={(e) => updateBlockConfig(block.id, { maxTokens2: parseInt(e.target.value) })}
+                              className="w-full p-2 border border-gray-300 rounded-md text-sm"
+                            />
+                          </div>
+                        </div>
+                      </>
+                    ) : block.type === 'llm_extraction' || block.type === 'llm_refinement' || block.type === 'llm_evaluation' ? (
                       <>
                         <div>
                           <label className="block text-xs font-medium mb-1">Model</label>
@@ -966,6 +1164,70 @@ export default function PipelineBuilderTab() {
                           ) : (
                             <span className="text-gray-500">No injuries found</span>
                           )}
+                        </div>
+                      </div>
+                    )}
+
+                    {result.blockType === 'double_layer_llm' && result.output && (
+                      <div className="space-y-3">
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-1">
+                            Final Injuries (Combined via Jaccard): {result.output.finalInjuries?.length || 0}
+                          </div>
+                          <div className="text-sm bg-white p-2 rounded border border-gray-200">
+                            {result.output.finalInjuries && result.output.finalInjuries.length > 0 ? (
+                              <pre className="text-xs">{JSON.stringify(result.output.finalInjuries, null, 2)}</pre>
+                            ) : (
+                              <span className="text-gray-500">No injuries found</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="p-2 bg-blue-50 rounded border border-blue-200">
+                            <div className="font-semibold text-blue-900">Jaccard Similarity</div>
+                            <div className="text-lg font-bold text-blue-700">
+                              {result.output.jaccardSimilarity !== undefined 
+                                ? (result.output.jaccardSimilarity * 100).toFixed(1) + '%'
+                                : 'N/A'}
+                            </div>
+                            <div className="text-xs text-blue-600 mt-1">
+                              Agreement between both LLMs
+                            </div>
+                          </div>
+                          <div className="p-2 bg-green-50 rounded border border-green-200">
+                            <div className="font-semibold text-green-900">Agreement (Intersection)</div>
+                            <div className="text-lg font-bold text-green-700">
+                              {result.output.intersection?.length || 0} injuries
+                            </div>
+                            <div className="text-xs text-green-600 mt-1">
+                              Both LLMs agreed on these
+                            </div>
+                            {result.output.intersection && result.output.intersection.length > 0 && (
+                              <div className="mt-1 text-xs text-green-600">
+                                {result.output.intersection.join(', ')}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="p-2 bg-gray-50 rounded border border-gray-200">
+                            <div className="font-semibold text-gray-900">LLM 1 Injuries</div>
+                            <div className="text-sm text-gray-700">{result.output.llm1Injuries?.length || 0}</div>
+                            {result.output.llm1Injuries && result.output.llm1Injuries.length > 0 && (
+                              <div className="mt-1 text-xs text-gray-500">
+                                {result.output.llm1Injuries.map((inj: any) => inj.matched_injury).join(', ')}
+                              </div>
+                            )}
+                          </div>
+                          <div className="p-2 bg-gray-50 rounded border border-gray-200">
+                            <div className="font-semibold text-gray-900">LLM 2 Injuries</div>
+                            <div className="text-sm text-gray-700">{result.output.llm2Injuries?.length || 0}</div>
+                            {result.output.llm2Injuries && result.output.llm2Injuries.length > 0 && (
+                              <div className="mt-1 text-xs text-gray-500">
+                                {result.output.llm2Injuries.map((inj: any) => inj.matched_injury).join(', ')}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )}
