@@ -20,15 +20,70 @@ export async function POST(request: NextRequest) {
       layer1Evidence,
       noteContent,
       config,
-      mode = 'validate', // 'validate' or 'find_sentences'
+      mode = 'validate', // 'validate', 'find_sentences', or 'direct'
     }: {
       layer1Evidence?: Layer1Evidence;
       noteContent?: string;
       config?: SemanticValidatorConfig;
-      mode?: 'validate' | 'find_sentences';
+      mode?: 'validate' | 'find_sentences' | 'direct';
     } = body;
 
-    if (mode === 'find_sentences') {
+    if (mode === 'direct') {
+      // Direct semantic validation - no Layer 1, works directly on note content
+      if (!noteContent) {
+        return NextResponse.json(
+          { error: 'noteContent is required for direct mode' },
+          { status: 400 }
+        );
+      }
+
+      const finalConfig = { ...{ strongThreshold: 0.7, mediumThreshold: 0.5, minThreshold: 0.3 }, ...config };
+      const similarSentences = await findSimilarSentences(noteContent, 100); // Get many results
+
+      // Convert to SemanticValidationResult format
+      const strongMatches = similarSentences
+        .filter(s => s.similarity >= finalConfig.strongThreshold)
+        .map(s => ({
+          text: s.sentence,
+          matchedInjury: s.matchedInjury,
+          similarity: s.similarity,
+          originalCandidate: null,
+          isStrongMatch: true,
+        }));
+
+      const mediumMatches = similarSentences
+        .filter(s => s.similarity >= finalConfig.mediumThreshold && s.similarity < finalConfig.strongThreshold)
+        .map(s => ({
+          text: s.sentence,
+          matchedInjury: s.matchedInjury,
+          similarity: s.similarity,
+          originalCandidate: null,
+          isStrongMatch: false,
+        }));
+
+      const weakMatches = similarSentences
+        .filter(s => s.similarity >= finalConfig.minThreshold && s.similarity < finalConfig.mediumThreshold)
+        .map(s => ({
+          text: s.sentence,
+          matchedInjury: s.matchedInjury,
+          similarity: s.similarity,
+          originalCandidate: null,
+          isStrongMatch: false,
+        }));
+
+      // All sentences that don't meet minimum threshold
+      const sentences = noteContent.split(/[.!?]\s+/).map(s => s.trim()).filter(s => s.length > 10);
+      const matchedSentences = new Set(similarSentences.map(s => s.sentence));
+      const unmatched = sentences.filter(s => !matchedSentences.has(s));
+
+      return NextResponse.json({
+        mode: 'direct',
+        strongMatches,
+        mediumMatches,
+        weakMatches,
+        unmatched,
+      });
+    } else if (mode === 'find_sentences') {
       // Find similar sentences in the note
       if (!noteContent) {
         return NextResponse.json(

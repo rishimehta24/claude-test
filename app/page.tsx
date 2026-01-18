@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { ALL_MODELS, ModelInfo } from '@/lib/constants';
-import RndTab from './components/RndTab';
 import BulkTestTab from './components/BulkTestTab';
-import SemanticTab from './components/SemanticTab';
+import SemanticVisualizerTab from './components/SemanticVisualizerTab';
+import CostCalculatorTab from './components/CostCalculatorTab';
+import PipelineBuilderTab from './components/PipelineBuilderTab';
 
 interface Evaluation {
   accuracy: string;
@@ -45,7 +46,7 @@ interface ComparisonResult {
 }
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<'comparison' | 'rnd' | 'bulk' | 'semantic'>('comparison');
+  const [activeTab, setActiveTab] = useState<'comparison' | 'bulk' | 'visualizer' | 'cost' | 'pipeline'>('comparison');
   const [residents, setResidents] = useState<Resident[]>([]);
   const [expandedResidents, setExpandedResidents] = useState<Set<string>>(new Set());
   const [comparisons, setComparisons] = useState<Record<string, Record<string | number, ComparisonResult>>>({});
@@ -347,24 +348,34 @@ export default function Home() {
               Bulk Testing
             </button>
             <button
-              onClick={() => setActiveTab('rnd')}
+              onClick={() => setActiveTab('visualizer')}
               className={`px-6 py-3 font-semibold transition-colors ${
-                activeTab === 'rnd'
+                activeTab === 'visualizer'
                   ? 'text-blue-600 border-b-2 border-blue-600'
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              R&D Pipeline
+              Semantic Visualizer
             </button>
             <button
-              onClick={() => setActiveTab('semantic')}
+              onClick={() => setActiveTab('cost')}
               className={`px-6 py-3 font-semibold transition-colors ${
-                activeTab === 'semantic'
+                activeTab === 'cost'
                   ? 'text-blue-600 border-b-2 border-blue-600'
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              Semantic Validation
+              Cost Calculator
+            </button>
+            <button
+              onClick={() => setActiveTab('pipeline')}
+              className={`px-6 py-3 font-semibold transition-colors ${
+                activeTab === 'pipeline'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Pipeline Builder
             </button>
           </div>
         </div>
@@ -372,10 +383,12 @@ export default function Home() {
         {/* Tab Content */}
         {activeTab === 'bulk' ? (
           <BulkTestTab />
-        ) : activeTab === 'rnd' ? (
-          <RndTab />
-        ) : activeTab === 'semantic' ? (
-          <SemanticTab />
+        ) : activeTab === 'visualizer' ? (
+          <SemanticVisualizerTab />
+        ) : activeTab === 'cost' ? (
+          <CostCalculatorTab />
+        ) : activeTab === 'pipeline' ? (
+          <PipelineBuilderTab />
         ) : (
           <>
           {bulkProcessing && (
