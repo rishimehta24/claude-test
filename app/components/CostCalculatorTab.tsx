@@ -34,12 +34,6 @@ const MODEL_PRICING: Record<string, { input: number; output: number; name: strin
   'claude-sonnet-4-5-20250929': { input: 3.0, output: 15.0, name: 'Claude Sonnet 4.5' },
   'claude-haiku-4-5-20251001': { input: 1.0, output: 5.0, name: 'Claude Haiku 4.5' },
   'claude-3-haiku-20240307': { input: 0.8, output: 4.0, name: 'Claude 3 Haiku' },
-  'gpt-4o': { input: 2.5, output: 10.0, name: 'GPT-4o' },
-  'gpt-4-turbo': { input: 10.0, output: 30.0, name: 'GPT-4 Turbo' },
-  'gpt-4o-mini': { input: 0.15, output: 0.6, name: 'GPT-4o Mini' },
-  'gpt-3.5-turbo': { input: 1.5, output: 3.0, name: 'GPT-3.5 Turbo' },
-  'gemini-1.5-pro-latest': { input: 2.0, output: 12.0, name: 'Gemini 1.5 Pro' },
-  'gemini-1.5-flash-latest': { input: 0.1, output: 0.4, name: 'Gemini 1.5 Flash' },
 };
 
 const EXAMPLE_NOTE = `Effective Date: 11/24/2025 12:15Type: RNAO - Post Fall Assessment Section B Post Fall Assessment : Fall was witnessed. Date and time the Resident fell or was found: 11/24/2025 12:15 PMDate and time of notification: 11/24/2025Name of SDM/POA contacted. Vicky and Brian TiltWitness report: Resident was standing in elevator with Lindsay PSW and start telling that she feeling dizzy and Lindsy said by the time while she was trying to help Linda she fell and hit her head on elevator wallResident's description of the fall: Feeling DizzyResident does not have any fall-related injury/injuries or verbal/non-verbal indicators of pain. Resident shows signs of new pain after fall. Resident hit their head. Resident is drowsy.`;

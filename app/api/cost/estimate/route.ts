@@ -5,9 +5,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { findSimilarSentences } from '@/lib/semantic-validator';
-import Anthropic from '@anthropic-ai/sdk';
-import OpenAI from 'openai';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ALL_MODELS } from '@/lib/constants';
 
 export const runtime = 'nodejs';
@@ -24,12 +21,6 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'claude-sonnet-4-5-20250929': { input: 3.0, output: 15.0 },
   'claude-haiku-4-5-20251001': { input: 1.0, output: 5.0 },
   'claude-3-haiku-20240307': { input: 0.8, output: 4.0 },
-  'gpt-4o': { input: 2.5, output: 10.0 },
-  'gpt-4-turbo': { input: 10.0, output: 30.0 },
-  'gpt-4o-mini': { input: 0.15, output: 0.6 },
-  'gpt-3.5-turbo': { input: 1.5, output: 3.0 },
-  'gemini-1.5-pro-latest': { input: 2.0, output: 12.0 },
-  'gemini-1.5-flash-latest': { input: 0.1, output: 0.4 },
 };
 
 function estimateTokens(text: string): number {

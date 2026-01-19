@@ -1,25 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import OpenAI from 'openai';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { SYSTEM_PROMPT, USER_PROMPT_TEMPLATE, API_SETTINGS, CLAUDE_MODELS, ALL_MODELS, ModelProvider, ModelInfo } from '@/lib/constants';
+import { SYSTEM_PROMPT, USER_PROMPT_TEMPLATE, API_SETTINGS, CLAUDE_MODELS } from '@/lib/constants';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
 });
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || '',
-});
-
-const genAI = process.env.GOOGLE_API_KEY 
-  ? new GoogleGenerativeAI(process.env.GOOGLE_API_KEY)
-  : null;
-
-function getModelProvider(modelId: string): ModelProvider {
-  const model = ALL_MODELS.find(m => m.id === modelId);
-  return model?.provider || 'anthropic';
-}
 
 async function callAnthropic(model: string, systemPrompt: string, userPrompt: string): Promise<string> {
   const message = await anthropic.messages.create({
@@ -39,39 +24,6 @@ async function callAnthropic(model: string, systemPrompt: string, userPrompt: st
   return content.type === 'text' ? content.text : '';
 }
 
-async function callOpenAI(model: string, systemPrompt: string, userPrompt: string): Promise<string> {
-  const completion = await openai.chat.completions.create({
-    model,
-    temperature: API_SETTINGS.temperature,
-    max_tokens: API_SETTINGS.maxTokens,
-    messages: [
-      {
-        role: 'system',
-        content: systemPrompt,
-      },
-      {
-        role: 'user',
-        content: userPrompt,
-      },
-    ],
-  });
-  
-  return completion.choices[0]?.message?.content || '';
-}
-
-async function callGoogle(model: string, systemPrompt: string, userPrompt: string): Promise<string> {
-  if (!genAI) {
-    throw new Error('Google API key not configured');
-  }
-  
-  const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
-  const genModel = genAI.getGenerativeModel({ model });
-  
-  const result = await genModel.generateContent(fullPrompt);
-  const response = await result.response;
-  return response.text();
-}
-
 export async function POST(request: NextRequest) {
   try {
     const { noteContent, models } = await request.json();
@@ -89,23 +41,7 @@ export async function POST(request: NextRequest) {
     const results = await Promise.allSettled(
       modelsToTest.map(async (modelId: string) => {
         try {
-          const provider = getModelProvider(modelId);
-          let text: string;
-
-          // Route to appropriate provider
-          switch (provider) {
-            case 'anthropic':
-              text = await callAnthropic(modelId, SYSTEM_PROMPT, userPrompt);
-              break;
-            case 'openai':
-              text = await callOpenAI(modelId, SYSTEM_PROMPT, userPrompt);
-              break;
-            case 'google':
-              text = await callGoogle(modelId, SYSTEM_PROMPT, userPrompt);
-              break;
-            default:
-              throw new Error(`Unsupported provider for model: ${modelId}`);
-          }
+          const text = await callAnthropic(modelId, SYSTEM_PROMPT, userPrompt);
 
           // Try to parse JSON from the response
           let parsedResponse;

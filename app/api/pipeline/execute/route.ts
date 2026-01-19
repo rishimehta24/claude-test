@@ -8,13 +8,38 @@ import { runPipeline, Layer1Evidence } from '@/lib/rnd/pipeline';
 import { evaluateEvidence } from '@/lib/rnd/evaluator';
 import { findSimilarSentences, validateSemantically } from '@/lib/semantic-validator';
 import Anthropic from '@anthropic-ai/sdk';
-import OpenAI from 'openai';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ALL_MODELS, ALLOWED_INJURIES } from '@/lib/rnd/schema';
 import { LAYER1_SYSTEM_PROMPT, LAYER1_USER_PROMPT_TEMPLATE } from '@/lib/rnd/prompts';
 import { SYSTEM_PROMPT, USER_PROMPT_TEMPLATE } from '@/lib/constants';
 
 export const runtime = 'nodejs';
+
+// Helper function to call Claude LLM
+async function callLLM(
+  modelId: string,
+  systemPrompt: string,
+  userPrompt: string,
+  temperature: number,
+  maxTokens: number,
+  apiKey: string
+): Promise<{ response: string; usage: { input_tokens: number; output_tokens: number } }> {
+  const anthropic = new Anthropic({ apiKey: apiKey || process.env.ANTHROPIC_API_KEY || '' });
+  const message = await anthropic.messages.create({
+    model: modelId,
+    max_tokens: maxTokens,
+    temperature,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userPrompt }],
+  });
+  const content = message.content[0];
+  return {
+    response: content.type === 'text' ? content.text : '',
+    usage: {
+      input_tokens: message.usage.input_tokens,
+      output_tokens: message.usage.output_tokens,
+    },
+  };
+}
 
 export interface PipelineBlock {
   id: string;
@@ -56,12 +81,6 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'claude-sonnet-4-5-20250929': { input: 3.0, output: 15.0 },
   'claude-haiku-4-5-20251001': { input: 1.0, output: 5.0 },
   'claude-3-haiku-20240307': { input: 0.8, output: 4.0 },
-  'gpt-4o': { input: 2.5, output: 10.0 },
-  'gpt-4-turbo': { input: 10.0, output: 30.0 },
-  'gpt-4o-mini': { input: 0.15, output: 0.6 },
-  'gpt-3.5-turbo': { input: 1.5, output: 3.0 },
-  'gemini-1.5-pro-latest': { input: 2.0, output: 12.0 },
-  'gemini-1.5-flash-latest': { input: 0.1, output: 0.4 },
 };
 
 // Export executeBlock for use in batch evaluation
@@ -120,23 +139,19 @@ export async function executeBlock(
         const temperature = block.config?.temperature ?? 0;
         const maxTokens = block.config?.maxTokens || 2000;
 
-        const anthropic = new Anthropic({ apiKey });
         const layer1Prompt = LAYER1_USER_PROMPT_TEMPLATE(noteForExtraction);
-        
-        const inputTokens = estimateTokens(LAYER1_SYSTEM_PROMPT + layer1Prompt);
-        
-        const message = await anthropic.messages.create({
-          model: modelId,
-          max_tokens: maxTokens,
+        const llmResult = await callLLM(
+          modelId,
+          LAYER1_SYSTEM_PROMPT,
+          layer1Prompt,
           temperature,
-          system: LAYER1_SYSTEM_PROMPT,
-          messages: [{ role: 'user', content: layer1Prompt }],
-        });
+          maxTokens,
+          apiKey
+        );
 
-        const content = message.content[0];
-        const rawResponse = content.type === 'text' ? content.text : '';
-        const outputTokens = message.usage.output_tokens;
-        const actualInputTokens = message.usage.input_tokens;
+        const rawResponse = llmResult.response;
+        const outputTokens = llmResult.usage.output_tokens;
+        const actualInputTokens = llmResult.usage.input_tokens;
 
         // Parse JSON response
         let layer1Evidence: Layer1Evidence | null = null;
@@ -218,21 +233,18 @@ export async function executeBlock(
         const systemPrompt = `You are a medical data analyst. Review semantic validation matches and determine actual injuries. Return ONLY a JSON array: [{phrase: "...", matched_injury: "..."}] or [] if none.`;
         const userPrompt = `ORIGINAL NOTE:\n${noteForRefinement}\n\n${matchesTable}\n\nReturn JSON array of actual injuries.`;
 
-        const anthropicRefine = new Anthropic({ apiKey });
-        const refineInputTokens = estimateTokens(systemPrompt + userPrompt);
-        
-        const refineMessage = await anthropicRefine.messages.create({
-          model: refineModelId,
-          max_tokens: 2000,
-          temperature: 0,
-          system: systemPrompt,
-          messages: [{ role: 'user', content: userPrompt }],
-        });
+        const refineLLMResult = await callLLM(
+          refineModelId,
+          systemPrompt,
+          userPrompt,
+          0,
+          2000,
+          apiKey
+        );
 
-        const refineContent = refineMessage.content[0];
-        const refineResponse = refineContent.type === 'text' ? refineContent.text : '';
-        const refineOutputTokens = refineMessage.usage.output_tokens;
-        const refineActualInputTokens = refineMessage.usage.input_tokens;
+        const refineResponse = refineLLMResult.response;
+        const refineOutputTokens = refineLLMResult.usage.output_tokens;
+        const refineActualInputTokens = refineLLMResult.usage.input_tokens;
 
         let finalInjuriesRefined: Array<{ phrase: string; matched_injury: string }> = [];
         try {
@@ -268,22 +280,19 @@ export async function executeBlock(
         const evalTemperature = block.config?.temperature ?? 0.1;
         const evalMaxTokens = block.config?.maxTokens || 500;
 
-        const anthropicEval = new Anthropic({ apiKey });
         const evalUserPrompt = USER_PROMPT_TEMPLATE(noteForEval);
-        const evalInputTokens = estimateTokens(SYSTEM_PROMPT + evalUserPrompt);
+        const evalLLMResult = await callLLM(
+          evalModelId,
+          SYSTEM_PROMPT,
+          evalUserPrompt,
+          evalTemperature,
+          evalMaxTokens,
+          apiKey
+        );
 
-        const evalMessage = await anthropicEval.messages.create({
-          model: evalModelId,
-          max_tokens: evalMaxTokens,
-          temperature: evalTemperature,
-          system: SYSTEM_PROMPT,
-          messages: [{ role: 'user', content: evalUserPrompt }],
-        });
-
-        const evalContent = evalMessage.content[0];
-        const evalResponse = evalContent.type === 'text' ? evalContent.text : '';
-        const evalOutputTokens = evalMessage.usage.output_tokens;
-        const evalActualInputTokens = evalMessage.usage.input_tokens;
+        const evalResponse = evalLLMResult.response;
+        const evalOutputTokens = evalLLMResult.usage.output_tokens;
+        const evalActualInputTokens = evalLLMResult.usage.input_tokens;
 
         // Parse JSON response (should be array of injuries)
         let evaluatedInjuries: Array<{ phrase: string; matched_injury: string }> = [];
@@ -321,34 +330,31 @@ export async function executeBlock(
         const maxTokens1 = block.config?.maxTokens || 500;
         const maxTokens2 = block.config?.maxTokens2 || 500;
 
-        // Run both LLMs in parallel
-        const anthropic1 = new Anthropic({ apiKey });
-        const anthropic2 = new Anthropic({ apiKey });
+        // Run both LLMs in parallel (can be different providers)
         const userPrompt1 = USER_PROMPT_TEMPLATE(noteForDoubleLayer);
         const userPrompt2 = USER_PROMPT_TEMPLATE(noteForDoubleLayer);
 
-        const [message1, message2] = await Promise.all([
-          anthropic1.messages.create({
-            model: model1Id,
-            max_tokens: maxTokens1,
-            temperature: temp1,
-            system: SYSTEM_PROMPT,
-            messages: [{ role: 'user', content: userPrompt1 }],
-          }),
-          anthropic2.messages.create({
-            model: model2Id,
-            max_tokens: maxTokens2,
-            temperature: temp2,
-            system: SYSTEM_PROMPT,
-            messages: [{ role: 'user', content: userPrompt2 }],
-          }),
+        const [llmResult1, llmResult2] = await Promise.all([
+          callLLM(
+            model1Id,
+            SYSTEM_PROMPT,
+            userPrompt1,
+            temp1,
+            maxTokens1,
+            apiKey
+          ),
+          callLLM(
+            model2Id,
+            SYSTEM_PROMPT,
+            userPrompt2,
+            temp2,
+            maxTokens2,
+            apiKey
+          ),
         ]);
 
-        // Parse both responses
-        const content1 = message1.content[0];
-        const response1 = content1.type === 'text' ? content1.text : '';
-        const content2 = message2.content[0];
-        const response2 = content2.type === 'text' ? content2.text : '';
+        const response1 = llmResult1.response;
+        const response2 = llmResult2.response;
 
         let injuries1: Array<{ phrase: string; matched_injury: string }> = [];
         let injuries2: Array<{ phrase: string; matched_injury: string }> = [];
@@ -400,10 +406,10 @@ export async function executeBlock(
         // Calculate costs
         const pricing1 = MODEL_PRICING[model1Id] || { input: 3.0, output: 15.0 };
         const pricing2 = MODEL_PRICING[model2Id] || { input: 1.0, output: 5.0 };
-        const cost1 = (message1.usage.input_tokens / 1_000_000) * pricing1.input + 
-                      (message1.usage.output_tokens / 1_000_000) * pricing1.output;
-        const cost2 = (message2.usage.input_tokens / 1_000_000) * pricing2.input + 
-                      (message2.usage.output_tokens / 1_000_000) * pricing2.output;
+        const cost1 = (llmResult1.usage.input_tokens / 1_000_000) * pricing1.input + 
+                      (llmResult1.usage.output_tokens / 1_000_000) * pricing1.output;
+        const cost2 = (llmResult2.usage.input_tokens / 1_000_000) * pricing2.input + 
+                      (llmResult2.usage.output_tokens / 1_000_000) * pricing2.output;
         const totalCost = cost1 + cost2;
 
         blockResult.output = {
@@ -419,8 +425,8 @@ export async function executeBlock(
         };
         blockResult.metadata = {
           tokens: { 
-            input: message1.usage.input_tokens + message2.usage.input_tokens,
-            output: message1.usage.output_tokens + message2.usage.output_tokens
+            input: llmResult1.usage.input_tokens + llmResult2.usage.input_tokens,
+            output: llmResult1.usage.output_tokens + llmResult2.usage.output_tokens
           },
           cost: totalCost,
         };

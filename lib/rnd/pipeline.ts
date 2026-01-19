@@ -6,21 +6,14 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import OpenAI from 'openai';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Layer1Evidence, FinalInjuries, ALLOWED_INJURIES } from './schema';
 import { LAYER1_SYSTEM_PROMPT, LAYER1_USER_PROMPT_TEMPLATE } from './prompts';
 import { evaluateEvidence, DEFAULT_CONFIG, EvaluatorConfig } from './evaluator';
 import { extractRelevantSections } from './section-recognizer';
-import { ALL_MODELS, ModelProvider, ModelInfo } from '@/lib/constants';
 
 export interface PipelineConfig {
-  /** API keys - can provide multiple for different providers */
-  apiKeys?: {
-    anthropic?: string;
-    openai?: string;
-    google?: string;
-  };
+  /** API key for Anthropic */
+  apiKey?: string;
   /** Model to use for Layer 1 extraction */
   model: string;
   /** Temperature (should be 0 for determinism) */
@@ -50,11 +43,6 @@ export interface PipelineResult {
   preprocessedNote?: string;
 }
 
-function getModelProvider(modelId: string): ModelProvider {
-  const model = ALL_MODELS.find(m => m.id === modelId);
-  return model?.provider || 'anthropic';
-}
-
 async function callLayer1Anthropic(
   model: string,
   apiKey: string,
@@ -80,48 +68,6 @@ async function callLayer1Anthropic(
   return content.type === 'text' ? content.text : '';
 }
 
-async function callLayer1OpenAI(
-  model: string,
-  apiKey: string,
-  systemPrompt: string,
-  userPrompt: string,
-  maxTokens: number,
-  temperature: number
-): Promise<string> {
-  const openai = new OpenAI({ apiKey });
-  const completion = await openai.chat.completions.create({
-    model,
-    temperature,
-    max_tokens: maxTokens,
-    messages: [
-      {
-        role: 'system',
-        content: systemPrompt,
-      },
-      {
-        role: 'user',
-        content: userPrompt,
-      },
-    ],
-  });
-  return completion.choices[0]?.message?.content || '';
-}
-
-async function callLayer1Google(
-  model: string,
-  apiKey: string,
-  systemPrompt: string,
-  userPrompt: string,
-  maxTokens: number,
-  temperature: number
-): Promise<string> {
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
-  const genModel = genAI.getGenerativeModel({ model });
-  const result = await genModel.generateContent(fullPrompt);
-  const response = await result.response;
-  return response.text();
-}
 
 /**
  * Main pipeline function
@@ -145,55 +91,17 @@ export async function runPipeline(
 
     // Step 2: Layer 1 - LLM Evidence Extraction
     const layer1Prompt = LAYER1_USER_PROMPT_TEMPLATE(noteToProcess);
-    const provider = getModelProvider(config.model);
-    const apiKeys = config.apiKeys || {};
+    const apiKey = config.apiKey || process.env.ANTHROPIC_API_KEY || '';
+    if (!apiKey) throw new Error('Anthropic API key not provided');
     
-    let rawLayer1Response: string;
-    
-    // Route to appropriate provider
-    switch (provider) {
-      case 'anthropic': {
-        const apiKey = apiKeys.anthropic || process.env.ANTHROPIC_API_KEY || '';
-        if (!apiKey) throw new Error('Anthropic API key not provided');
-        rawLayer1Response = await callLayer1Anthropic(
-          config.model,
-          apiKey,
-          LAYER1_SYSTEM_PROMPT,
-          layer1Prompt,
-          config.maxTokens || 2000,
-          config.temperature ?? 0
-        );
-        break;
-      }
-      case 'openai': {
-        const apiKey = apiKeys.openai || process.env.OPENAI_API_KEY || '';
-        if (!apiKey) throw new Error('OpenAI API key not provided');
-        rawLayer1Response = await callLayer1OpenAI(
-          config.model,
-          apiKey,
-          LAYER1_SYSTEM_PROMPT,
-          layer1Prompt,
-          config.maxTokens || 2000,
-          config.temperature ?? 0
-        );
-        break;
-      }
-      case 'google': {
-        const apiKey = apiKeys.google || process.env.GOOGLE_API_KEY || '';
-        if (!apiKey) throw new Error('Google API key not provided');
-        rawLayer1Response = await callLayer1Google(
-          config.model,
-          apiKey,
-          LAYER1_SYSTEM_PROMPT,
-          layer1Prompt,
-          config.maxTokens || 2000,
-          config.temperature ?? 0
-        );
-        break;
-      }
-      default:
-        throw new Error(`Unsupported provider for model: ${config.model}`);
-    }
+    const rawLayer1Response = await callLayer1Anthropic(
+      config.model,
+      apiKey,
+      LAYER1_SYSTEM_PROMPT,
+      layer1Prompt,
+      config.maxTokens || 2000,
+      config.temperature ?? 0
+    );
 
     // Parse Layer 1 JSON response with robust parsing
     let layer1Evidence: Layer1Evidence | null = null;

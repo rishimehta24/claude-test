@@ -6,9 +6,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { findSimilarSentences } from '@/lib/semantic-validator';
 import Anthropic from '@anthropic-ai/sdk';
-import OpenAI from 'openai';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { ALL_MODELS } from '@/lib/constants';
 import { ALLOWED_INJURIES } from '@/lib/rnd/schema';
 
 export const runtime = 'nodejs';
@@ -51,51 +48,21 @@ CRITICAL RULES:
 - Do NOT include symptoms that aren't physical injuries
 - Be conservative - if unsure, exclude it`;
 
-function getModelProvider(modelId: string): 'anthropic' | 'openai' | 'google' {
-  const model = ALL_MODELS.find(m => m.id === modelId);
-  return model?.provider || 'anthropic';
-}
-
 async function callLLM(
   modelId: string,
   systemPrompt: string,
   userPrompt: string
 ): Promise<string> {
-  const provider = getModelProvider(modelId);
-
-  if (provider === 'anthropic') {
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || '' });
-    const message = await anthropic.messages.create({
-      model: modelId,
-      max_tokens: 2000,
-      temperature: 0,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
-    });
-    const content = message.content[0];
-    return content.type === 'text' ? content.text : '';
-  } else if (provider === 'openai') {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || '' });
-    const completion = await openai.chat.completions.create({
-      model: modelId,
-      temperature: 0,
-      max_tokens: 2000,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-    });
-    return completion.choices[0]?.message?.content || '';
-  } else if (provider === 'google') {
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
-    const genModel = genAI.getGenerativeModel({ model: modelId });
-    const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
-    const result = await genModel.generateContent(fullPrompt);
-    const response = await result.response;
-    return response.text();
-  } else {
-    throw new Error(`Unknown provider for model: ${modelId}`);
-  }
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || '' });
+  const message = await anthropic.messages.create({
+    model: modelId,
+    max_tokens: 2000,
+    temperature: 0,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userPrompt }],
+  });
+  const content = message.content[0];
+  return content.type === 'text' ? content.text : '';
 }
 
 export async function POST(request: NextRequest) {

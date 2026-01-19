@@ -1,4 +1,4 @@
-export type ModelProvider = 'anthropic' | 'openai' | 'google';
+export type ModelProvider = 'anthropic';
 
 export interface ModelInfo {
   id: string;
@@ -15,20 +15,6 @@ export const ALL_MODELS: ModelInfo[] = [
   { id: 'claude-haiku-4-5-20251001', provider: 'anthropic', displayName: 'Claude Haiku 4.5' },
   // Middle (balanced) - keep one
   { id: 'claude-sonnet-4-5-20250929', provider: 'anthropic', displayName: 'Claude Sonnet 4.5' },
-  
-  // OpenAI GPT Models
-  // Powerful models (most capable)
-  { id: 'gpt-4o', provider: 'openai', displayName: 'GPT-4o' },
-  { id: 'gpt-4-turbo', provider: 'openai', displayName: 'GPT-4 Turbo' },
-  // Fast models (quickest)
-  { id: 'gpt-4o-mini', provider: 'openai', displayName: 'GPT-4o Mini' },
-  { id: 'gpt-3.5-turbo', provider: 'openai', displayName: 'GPT-3.5 Turbo' },
-  
-  // Google Gemini Models
-  // Powerful model (most capable)
-  { id: 'gemini-3-pro-preview', provider: 'google', displayName: 'Gemini 3 Pro Preview' },
-  // Fast model (quickest)
-  { id: 'gemini-2.5-flash-lite', provider: 'google', displayName: 'Gemini 2.5 Flash Lite' },
 ];
 
 // Legacy export for backwards compatibility
